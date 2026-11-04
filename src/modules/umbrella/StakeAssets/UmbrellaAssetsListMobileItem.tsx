@@ -1,0 +1,70 @@
+import { Trans } from '@lingui/macro';
+import { Box } from '@mui/material';
+import { MergedStakeData } from 'src/hooks/stake/useUmbrellaSummary';
+import { StakingDropdown } from 'src/modules/umbrella/helpers/StakingDropdown';
+import { useRootStore } from 'src/store/root';
+import { useShallow } from 'zustand/shallow';
+
+import { Row } from '../../../components/primitives/Row';
+import { ListMobileItemWrapper } from '../../dashboard/lists/ListMobileItemWrapper';
+import { AmountSharesItem } from '../AmountSharesItem';
+import { AmountStakedUnderlyingItem } from '../AmountStakedUnderlyingItem';
+import { AvailableToClaimItem } from '../AvailableToClaimItem';
+import { AvailableToStakeItem } from '../AvailableToStakeItem';
+import { ApyTooltip } from '../helpers/ApyTooltip';
+import { SharesTooltip } from '../helpers/SharesTooltip';
+import { StakedUnderlyingTooltip } from '../helpers/StakedUnderlyingTooltip';
+import { StakingApyItem } from '../StakingApyItem';
+import { StakeAssetName } from './StakeAssetName';
+
+export const UmbrellaAssetsListMobileItem = ({ ...umbrellaStakeAsset }: MergedStakeData) => {
+  const [currentNetworkConfig] = useRootStore(useShallow((store) => [store.currentNetworkConfig]));
+
+  return (
+    <ListMobileItemWrapper>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <StakeAssetName
+          iconSymbol={umbrellaStakeAsset.iconSymbol}
+          symbol={umbrellaStakeAsset.symbol}
+          totalAmountStakedUSD={umbrellaStakeAsset.formattedStakeTokenData.totalAmountStakedUSD}
+          targetLiquidityUSD={umbrellaStakeAsset.formattedStakeTokenData.targetLiquidityUSD}
+          apyAtTargetLiquidity={umbrellaStakeAsset.totalRewardApyAtTargetLiquidity}
+          explorerUrl={`${currentNetworkConfig.explorerLink}/address/${umbrellaStakeAsset.tokenAddress}`}
+        />
+      </Box>
+      <Row mt={2} caption={<ApyTooltip />} captionVariant="description" mb={3}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <StakingApyItem stakeData={umbrellaStakeAsset} />
+        </Box>
+      </Row>
+      <Row
+        caption={<StakedUnderlyingTooltip />}
+        captionVariant="description"
+        mb={3}
+        align="flex-start"
+      >
+        <AmountStakedUnderlyingItem stakeData={umbrellaStakeAsset} />
+      </Row>
+      <Row caption={<SharesTooltip />} captionVariant="description" mb={3} align="flex-start">
+        <AmountSharesItem stakeData={umbrellaStakeAsset} inline />
+      </Row>
+
+      <Row
+        caption={<Trans>Available to stake</Trans>}
+        captionVariant="description"
+        mb={3}
+        align="flex-start"
+      >
+        <AvailableToStakeItem stakeData={umbrellaStakeAsset} />
+      </Row>
+
+      <Row caption={<Trans>Available to claim</Trans>} captionVariant="description" mb={3}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <AvailableToClaimItem stakeData={umbrellaStakeAsset} />
+        </Box>
+      </Row>
+
+      <StakingDropdown stakeData={umbrellaStakeAsset} fullWidth size="medium" />
+    </ListMobileItemWrapper>
+  );
+};

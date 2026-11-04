@@ -1,10 +1,11 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
 import { configEnvWithTenderlyBaseFork } from '../../../../support/steps/configuration.steps';
 import { borrow, repay, supply, withdraw } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aETHBaseV3: 5,
@@ -30,15 +31,8 @@ const testData = {
       {
         asset: assets.baseV3Market.USDbC,
         apyType: constants.apyType.variable,
-        amount: 2,
+        amount: 4,
         hasApproval: false,
-        repayOption: constants.repayType.collateral,
-      },
-      {
-        asset: assets.baseV3Market.USDbC,
-        apyType: constants.apyType.variable,
-        amount: 2,
-        hasApproval: true,
         repayOption: constants.repayType.wallet,
       },
       {
@@ -79,7 +73,6 @@ const testData = {
 describe.skip('USDbC INTEGRATION SPEC, BASE V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyBaseFork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

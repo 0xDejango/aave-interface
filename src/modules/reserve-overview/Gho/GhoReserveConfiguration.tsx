@@ -1,19 +1,28 @@
-import { ExternalLinkIcon } from '@heroicons/react/solid';
 import { Trans } from '@lingui/macro';
-import { Box, Button, Divider, SvgIcon, Typography } from '@mui/material';
-import { Link } from 'src/components/primitives/Link';
-import { ComputedReserveData } from 'src/hooks/app-data-provider/useAppDataProvider';
+import { Box, Divider, Typography } from '@mui/material';
+import { ExternalLinkButton } from 'src/components/ExternalLinkButton';
+import { ReserveWithId } from 'src/hooks/app-data-provider/useAppDataProvider';
+import { useAssetCapsSDK } from 'src/hooks/useAssetCapsSDK';
+import { useRootStore } from 'src/store/root';
+import { useShallow } from 'zustand/shallow';
 
+import { BorrowInfo } from '../BorrowInfo';
 import { ReserveEModePanel } from '../ReserveEModePanel';
 import { PanelRow, PanelTitle } from '../ReservePanels';
-import { GhoBorrowInfo } from './GhoBorrowInfo';
-import { GhoDiscountCalculator } from './GhoDiscountCalculator';
+
+// import { SavingsGho } from './SavingsGho';
 
 type GhoReserveConfigurationProps = {
-  reserve: ComputedReserveData;
+  reserve: ReserveWithId;
 };
 
 export const GhoReserveConfiguration: React.FC<GhoReserveConfigurationProps> = ({ reserve }) => {
+  const [currentNetworkConfig, currentMarketData] = useRootStore(
+    useShallow((store) => [store.currentNetworkConfig, store.currentMarketData])
+  );
+  const { borrowCap } = useAssetCapsSDK();
+  const showBorrowCapStatus = reserve.borrowInfo?.borrowCap.amount.value !== '0';
+
   return (
     <>
       <PanelRow>
@@ -21,7 +30,7 @@ export const GhoReserveConfiguration: React.FC<GhoReserveConfigurationProps> = (
           <Trans>About GHO</Trans>
         </PanelTitle>
         <Box>
-          <Typography gutterBottom>
+          <Typography>
             <Trans>
               GHO is a native decentralized, collateral-backed digital asset pegged to USD. It is
               created by users via borrowing against multiple collateral. When user repays their GHO
@@ -29,71 +38,45 @@ export const GhoReserveConfiguration: React.FC<GhoReserveConfigurationProps> = (
               accrued by minters of GHO would be directly transferred to the AaveDAO treasury.
             </Trans>
           </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <Button
-              component={Link}
-              variant="outlined"
-              size="small"
-              href="https://github.com/aave/gho/blob/main/techpaper/GHO_Technical_Paper.pdf"
-              sx={{ p: '2px 4px', mt: 2, mr: 2, minWidth: 0 }}
-            >
-              <Typography sx={{ mr: 1, fontSize: '10px' }}>
-                <Trans>Techpaper</Trans>
-              </Typography>
-              <SvgIcon sx={{ fontSize: 14 }}>
-                <ExternalLinkIcon />
-              </SvgIcon>
-            </Button>
-            <Button
-              component={Link}
-              variant="outlined"
-              size="small"
-              href="https://gho.xyz"
-              sx={{ p: '2px 4px', mt: 2, mr: 2, minWidth: 0 }}
-            >
-              <Typography sx={{ mr: 1, fontSize: '10px' }}>
-                <Trans>Website</Trans>
-              </Typography>
-              <SvgIcon sx={{ fontSize: 14 }}>
-                <ExternalLinkIcon />
-              </SvgIcon>
-            </Button>
-            <Button
-              component={Link}
-              variant="outlined"
-              size="small"
-              href="https://docs.gho.xyz/concepts/faq"
-              sx={{ p: '2px 4px', mt: 2, mr: 2, minWidth: 0 }}
-            >
-              <Typography sx={{ mr: 1, fontSize: '10px' }}>
-                <Trans>FAQ</Trans>
-              </Typography>
-              <SvgIcon sx={{ fontSize: 14 }}>
-                <ExternalLinkIcon />
-              </SvgIcon>
-            </Button>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 6 }}>
+            <ExternalLinkButton href="https://github.com/aave/gho/blob/main/techpaper/GHO_Technical_Paper.pdf">
+              <Trans>Techpaper</Trans>
+            </ExternalLinkButton>
+            <ExternalLinkButton href="https://gho.xyz">
+              <Trans>Website</Trans>
+            </ExternalLinkButton>
+            <ExternalLinkButton href="https://docs.gho.xyz/concepts/faq">
+              <Trans>FAQ</Trans>
+            </ExternalLinkButton>
           </Box>
         </Box>
       </PanelRow>
+      {/* <Divider sx={{ my: { xs: 6, sm: 10 } }} /> */}
+      {/* <PanelRow>
+        <PanelTitle>
+          <Trans>Savings GHO</Trans>
+        </PanelTitle>
+        <Box>
+          <SavingsGho />
+        </Box>
+      </PanelRow> */}
       <Divider sx={{ my: { xs: 6, sm: 10 } }} />
       <PanelRow>
         <PanelTitle>
           <Trans>Borrow info</Trans>
         </PanelTitle>
         <Box sx={{ flexGrow: 1, minWidth: 0, maxWidth: '100%', width: '100%' }}>
-          <GhoBorrowInfo reserve={reserve} />
-          <Box sx={{ mt: 8 }}>
-            <GhoDiscountCalculator />
-          </Box>
+          <BorrowInfo
+            showBorrowCapStatus={showBorrowCapStatus}
+            renderCharts={false}
+            currentMarketData={currentMarketData}
+            currentNetworkConfig={currentNetworkConfig}
+            reserve={reserve}
+            borrowCap={borrowCap}
+          />
         </Box>
       </PanelRow>
-      {reserve.eModes.length > 0 && (
+      {reserve.eModeInfo?.length > 0 && (
         <>
           <Divider sx={{ my: { xs: 6, sm: 10 } }} />
           <ReserveEModePanel reserve={reserve} />

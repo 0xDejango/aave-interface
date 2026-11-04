@@ -6,6 +6,7 @@ import {
   valueToBigNumber,
 } from '@aave/math-utils';
 import { Trans } from '@lingui/macro';
+import { Alert } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { BigNumber } from 'bignumber.js';
 import React, { useEffect, useRef, useState } from 'react';
@@ -28,6 +29,7 @@ import {
   DetailsNumberLineWithSub,
   TxModalDetails,
 } from '../FlowCommons/TxModalDetails';
+import { getSafeAmountToRepayAll } from '../utils';
 import { RepayActions } from './RepayActions';
 
 interface RepayAsset extends Asset {
@@ -67,6 +69,7 @@ export const RepayModalContent = ({
   const [repayMax, setRepayMax] = useState('');
   const [_amount, setAmount] = useState('');
   const amountRef = useRef<string>();
+  const [showUSDTResetWarning, setShowUSDTResetWarning] = useState(false);
 
   const networkConfig = getNetworkConfig(currentChainId);
 
@@ -80,9 +83,7 @@ export const RepayModalContent = ({
     .multipliedBy(marketReferencePriceInUsd)
     .shiftedBy(-USD_DECIMALS);
 
-  const safeAmountToRepayAll = valueToBigNumber(debt)
-    .multipliedBy('1.0025')
-    .decimalPlaces(poolReserve.decimals, BigNumber.ROUND_UP);
+  const safeAmountToRepayAll = getSafeAmountToRepayAll(debt, poolReserve.decimals);
 
   // calculate max amount abailable to repay
   let maxAmountToRepay: BigNumber;
@@ -227,6 +228,7 @@ export const RepayModalContent = ({
   if (repayTxState.success)
     return (
       <TxSuccessView
+        title={<Trans>Repaid Successfully</Trans>}
         action={<Trans>repaid</Trans>}
         amount={amountRef.current}
         symbol={repayWithATokens ? poolReserve.symbol : tokenToRepayWith.symbol}
@@ -279,8 +281,17 @@ export const RepayModalContent = ({
 
       {txError && <GasEstimationError txError={txError} />}
 
+      {showUSDTResetWarning && (
+        <Alert severity="info" sx={{ mb: 6, width: '100%', mt: 5 }}>
+          <Trans>
+            USDT on Ethereum requires approval reset before a new approval. This will require an
+            additional transaction.
+          </Trans>
+        </Alert>
+      )}
+
       <RepayActions
-        maxApproveNeeded={safeAmountToRepayAll.toString()}
+        maxApproveNeeded={safeAmountToRepayAll.toString(10)}
         poolReserve={poolReserve}
         amountToRepay={isMaxSelected ? repayMax : amount}
         poolAddress={
@@ -289,6 +300,9 @@ export const RepayModalContent = ({
         isWrongNetwork={isWrongNetwork}
         symbol={modalSymbol}
         repayWithATokens={repayWithATokens}
+        setShowUSDTResetWarning={setShowUSDTResetWarning}
+        chainId={currentChainId}
+        maxAmountToRepay={maxAmountToRepay.toString(10)}
       />
     </>
   );

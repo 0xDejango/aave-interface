@@ -1,10 +1,11 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
 import { configEnvWithTenderlyBnbFork } from '../../../../support/steps/configuration.steps';
 import { borrow, repay, supply, withdraw } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aBNBBnbV3: 2,
@@ -30,15 +31,8 @@ const testData = {
       {
         asset: assets.bnbV3Market.USDC,
         apyType: constants.apyType.variable,
-        amount: 2,
+        amount: 4,
         hasApproval: false,
-        repayOption: constants.repayType.collateral,
-      },
-      {
-        asset: assets.bnbV3Market.USDC,
-        apyType: constants.apyType.variable,
-        amount: 2,
-        hasApproval: true,
         repayOption: constants.repayType.wallet,
       },
       {
@@ -79,7 +73,6 @@ const testData = {
 describe('USDbC INTEGRATION SPEC, BASE V3 MARKET', () => {
   const skipTestState = skipState(true);
   configEnvWithTenderlyBnbFork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

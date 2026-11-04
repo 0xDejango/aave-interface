@@ -9,7 +9,8 @@ import {
   AaveV3Gnosis,
   AaveV3Optimism,
   AaveV3Polygon,
-} from '@bgd-labs/aave-address-book';
+  AaveV3Sonic,
+} from '@aave-dao/aave-address-book';
 import {
   BuildTxFunctions,
   constructBuildTx,
@@ -22,6 +23,7 @@ import {
   TransactionParams,
 } from '@paraswap/sdk';
 import { GetRateFunctions, RateOptions } from '@paraswap/sdk/dist/methods/swap/rates';
+import { BigNumber } from 'bignumber.js';
 
 import { ComputedReserveData } from '../app-data-provider/useAppDataProvider';
 
@@ -97,6 +99,7 @@ const paraswapNetworks: ParaswapChainMap = {
   [ChainId.base]: { paraswap: ParaSwap(ChainId.base), feeTarget: AaveV3Base.COLLECTOR },
   [ChainId.bnb]: { paraswap: ParaSwap(ChainId.bnb), feeTarget: AaveV3BNB.COLLECTOR },
   [ChainId.xdai]: { paraswap: ParaSwap(ChainId.xdai), feeTarget: AaveV3Gnosis.COLLECTOR },
+  [ChainId.sonic]: { paraswap: ParaSwap(ChainId.sonic), feeTarget: AaveV3Sonic.COLLECTOR },
 };
 
 export const getParaswap = (chainId: ChainId) => {
@@ -127,13 +130,13 @@ const MESSAGE_REGEX_MAP: Array<{ regex: RegExp; message: string }> = [
  * @param message Paraswap error message
  * @returns Message for displaying in interface
  */
-export function convertParaswapErrorMessage(message: string): string {
+export function convertParaswapErrorMessage(message: string): string | undefined {
   if (message in MESSAGE_MAP) {
     return MESSAGE_MAP[message];
   }
 
   const newMessage = MESSAGE_REGEX_MAP.find((mapping) => mapping.regex.test(message))?.message;
-  return newMessage || 'There was an issue fetching data from Paraswap';
+  return newMessage;
 }
 
 /**
@@ -363,7 +366,15 @@ export const ExactInSwapper = (chainId: ChainId) => {
         augustus: (params as TransactionParams).to,
       };
     } catch (e) {
-      console.error(e);
+      console.error(e, {
+        srcToken,
+        srcDecimals,
+        destToken,
+        destDecimals,
+        user,
+        route,
+        maxSlippage,
+      });
       throw new Error('Error building transaction parameters');
     }
   };
@@ -374,7 +385,7 @@ export const ExactInSwapper = (chainId: ChainId) => {
   };
 };
 
-const ExactOutSwapper = (chainId: ChainId) => {
+export const ExactOutSwapper = (chainId: ChainId) => {
   const { paraswap, feeTarget } = getParaswap(chainId);
 
   const getRate = async (
@@ -432,7 +443,15 @@ const ExactOutSwapper = (chainId: ChainId) => {
         augustus: (params as TransactionParams).to,
       };
     } catch (e) {
-      console.log(e);
+      console.error(e, {
+        srcToken,
+        srcDecimals,
+        destToken,
+        destDecimals,
+        user,
+        route,
+        maxSlippage,
+      });
       throw new Error('Error building transaction parameters');
     }
   };
@@ -463,7 +482,7 @@ export const maxInputAmountWithSlippage = (
   if (inputAmount === '0') return '0';
   return valueToBigNumber(inputAmount)
     .multipliedBy(1 + Number(slippage) / 100)
-    .toFixed(decimals);
+    .toFixed(decimals, BigNumber.ROUND_UP);
 };
 
 export const minimumReceivedAfterSlippage = (

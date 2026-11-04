@@ -48,7 +48,7 @@ export const UnStakeModalContent = ({ stakeAssetName, icon }: UnStakeProps) => {
   const amountRef = useRef<string>();
 
   let amountToUnstake = stakeUserData?.userCooldownAmount;
-  if (stakeData?.inPostSlashingPeriod) {
+  if (stakeData?.inPostSlashingPeriod || stakeData?.stakeCooldownSeconds === 0) {
     amountToUnstake = stakeUserData?.stakeTokenUserBalance;
   }
 
@@ -98,18 +98,22 @@ export const UnStakeModalContent = ({ stakeAssetName, icon }: UnStakeProps) => {
   if (txState.success)
     return (
       <TxSuccessView
-        action={<Trans>Unstaked</Trans>}
+        title={<Trans>Unstaked Successfully</Trans>}
+        action={<Trans>unstaked</Trans>}
         amount={amountRef.current}
         symbol={nameFormatted}
       />
     );
 
-  console.log(icon);
   return (
     <>
       <TxModalTitle title="Unstake" symbol={nameFormatted} />
       {isWrongNetwork && !readOnlyModeAddress && (
-        <ChangeNetworkWarning networkName={networkConfig.name} chainId={stakingChain} />
+        <ChangeNetworkWarning
+          autoSwitchOnMount={true}
+          networkName={networkConfig.name}
+          chainId={stakingChain}
+        />
       )}
       <AssetInput
         value={amount}

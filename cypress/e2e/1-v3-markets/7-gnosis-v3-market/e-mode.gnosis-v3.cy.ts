@@ -1,3 +1,5 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../fixtures/assets.json';
 import constants from '../../../fixtures/constans.json';
 import { skipState } from '../../../support/steps/common';
@@ -7,7 +9,6 @@ import {
   borrowsAvailable,
   checkDashboardHealthFactor,
 } from '../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aETHBaseV3: 10,
@@ -36,7 +37,6 @@ const testData = {
 describe('E-MODE SPEC, GNOSIS V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyBaseFork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   describe('Prepare min health factor state, with stable coins', () => {

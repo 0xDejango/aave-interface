@@ -1,6 +1,11 @@
 import '/public/fonts/inter/inter.css';
+import '/public/fonts/inter/inter-variable.css';
 import '/src/styles/variables.css';
+// Preflight must come before funkit's own styles so funkit rules win source-order ties.
+import '/src/ui-config/funkit/funkitPreflight.css';
+import '@funkit/connect/styles.css';
 
+import { AaveClient, AaveProvider } from '@aave/react';
 import { CacheProvider, EmotionCache } from '@emotion/react';
 import { NoSsr } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -15,25 +20,49 @@ import { AddressBlocked } from 'src/components/AddressBlocked';
 import { Meta } from 'src/components/Meta';
 import { TransactionEventHandler } from 'src/components/TransactionEventHandler';
 import { GasStationProvider } from 'src/components/transactions/GasStation/GasStationProvider';
+import { CowOrderToast } from 'src/components/transactions/Swap/modals/result/CowOrderToast';
 import { AppDataProvider } from 'src/hooks/app-data-provider/useAppDataProvider';
+import { ComplianceProvider } from 'src/hooks/compliance/compliance';
 import { ModalContextProvider } from 'src/hooks/useModal';
+import { SwapOrdersTrackingProvider } from 'src/hooks/useSwapOrdersTracking';
 import { Web3ContextProvider } from 'src/libs/web3-data-provider/Web3Provider';
 import { useRootStore } from 'src/store/root';
 import { SharedDependenciesProvider } from 'src/ui-config/SharedDependenciesProvider';
 import { wagmiConfig } from 'src/ui-config/wagmiConfig';
 import { WagmiProvider } from 'wagmi';
-import { useShallow } from 'zustand/shallow';
 
 import createEmotionCache from '../src/createEmotionCache';
 import { AppGlobalStyles } from '../src/layouts/AppGlobalStyles';
 import { LanguageProvider } from '../src/libs/LanguageProvider';
 
-const SwitchModal = dynamic(() =>
-  import('src/components/transactions/Switch/SwitchModal').then((module) => module.SwitchModal)
+const SwapModal = dynamic(() =>
+  import('src/components/transactions/Swap/modals/SwapModal').then((module) => module.SwapModal)
+);
+
+const CollateralSwapModal = dynamic(() =>
+  import('src/components/transactions/Swap/modals/CollateralSwapModal').then(
+    (module) => module.CollateralSwapModal
+  )
+);
+
+const DebtSwapModal = dynamic(() =>
+  import('src/components/transactions/Swap/modals/DebtSwapModal').then(
+    (module) => module.DebtSwapModal
+  )
 );
 
 const BridgeModal = dynamic(() =>
   import('src/components/transactions/Bridge/BridgeModal').then((module) => module.BridgeModal)
+);
+
+// ssr: false (unlike the other modal hosts) because `@funkit/connect` is a
+// client-only, ESM/browser package.
+const FunkitCheckout = dynamic(
+  () =>
+    import('src/components/transactions/FunCheckout/FunkitCheckout').then(
+      (module) => module.FunkitCheckout
+    ),
+  { ssr: false }
 );
 
 const BorrowModal = dynamic(() =>
@@ -42,16 +71,6 @@ const BorrowModal = dynamic(() =>
 const ClaimRewardsModal = dynamic(() =>
   import('src/components/transactions/ClaimRewards/ClaimRewardsModal').then(
     (module) => module.ClaimRewardsModal
-  )
-);
-const CollateralChangeModal = dynamic(() =>
-  import('src/components/transactions/CollateralChange/CollateralChangeModal').then(
-    (module) => module.CollateralChangeModal
-  )
-);
-const DebtSwitchModal = dynamic(() =>
-  import('src/components/transactions/DebtSwitch/DebtSwitchModal').then(
-    (module) => module.DebtSwitchModal
   )
 );
 const EmodeModal = dynamic(() =>
@@ -66,9 +85,6 @@ const RepayModal = dynamic(() =>
 const SupplyModal = dynamic(() =>
   import('src/components/transactions/Supply/SupplyModal').then((module) => module.SupplyModal)
 );
-const SwapModal = dynamic(() =>
-  import('src/components/transactions/Swap/SwapModal').then((module) => module.SwapModal)
-);
 const WithdrawModal = dynamic(() =>
   import('src/components/transactions/Withdraw/WithdrawModal').then(
     (module) => module.WithdrawModal
@@ -79,8 +95,18 @@ const StakingMigrateModal = dynamic(() =>
     (module) => module.StakingMigrateModal
   )
 );
+const CancelCowOrderModal = dynamic(() =>
+  import('src/components/transactions/CancelCowOrder/CancelCowOrderModal').then(
+    (module) => module.CancelCowOrderModal
+  )
+);
 const ReadOnlyModal = dynamic(() =>
   import('src/components/WalletConnection/ReadOnlyModal').then((module) => module.ReadOnlyModal)
+);
+const CollateralChangeModal = dynamic(() =>
+  import('src/components/transactions/CollateralChange/CollateralChangeModal').then(
+    (module) => module.CollateralChangeModal
+  )
 );
 
 // Client-side cache, shared for the whole session of the user in the browser.
@@ -90,6 +116,8 @@ type NextPageWithLayout = NextPage & {
   getLayout?: (page: React.ReactElement) => React.ReactNode;
 };
 
+export const client = AaveClient.create();
+
 interface MyAppProps extends AppProps {
   emotionCache?: EmotionCache;
   Component: NextPageWithLayout;
@@ -97,9 +125,7 @@ interface MyAppProps extends AppProps {
 export default function MyApp(props: MyAppProps) {
   const { Component, emotionCache = clientSideEmotionCache, pageProps } = props;
   const getLayout = Component.getLayout ?? ((page: ReactNode) => page);
-  const [initializeEventsTracking, setWalletType] = useRootStore(
-    useShallow((store) => [store.initializeEventsTracking, store.setWalletType])
-  );
+  const initializeEventsTracking = useRootStore((store) => store.initializeEventsTracking);
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -133,51 +159,59 @@ export default function MyApp(props: MyAppProps) {
         description={
           'Aave is an Open Source Protocol to create Non-Custodial Liquidity Markets to earn interest on supplying and borrowing assets with a variable or stable interest rate. The protocol is designed for easy integration into your products and services.'
         }
-        imageUrl="https://app.aave.com/aave-com-opengraph.png"
+        imageUrl="https://app.aave.com/aave-opengraph.png"
       />
       <NoSsr>
-        <LanguageProvider>
-          <WagmiProvider config={wagmiConfig}>
-            <QueryClientProvider client={queryClient}>
-              <ConnectKitProvider
-                onDisconnect={cleanLocalStorage}
-                onConnect={({ connectorId }) => setWalletType(connectorId)}
-              >
-                <Web3ContextProvider>
-                  <AppGlobalStyles>
-                    <AddressBlocked>
-                      <ModalContextProvider>
-                        <SharedDependenciesProvider>
-                          <AppDataProvider>
-                            <GasStationProvider>
-                              {getLayout(<Component {...pageProps} />)}
-                              <SupplyModal />
-                              <WithdrawModal />
-                              <BorrowModal />
-                              <RepayModal />
-                              <CollateralChangeModal />
-                              <DebtSwitchModal />
-                              <ClaimRewardsModal />
-                              <EmodeModal />
-                              <SwapModal />
-                              <FaucetModal />
-                              <TransactionEventHandler />
-                              <SwitchModal />
-                              <StakingMigrateModal />
-                              <BridgeModal />
-                              <ReadOnlyModal />
-                            </GasStationProvider>
-                          </AppDataProvider>
-                        </SharedDependenciesProvider>
-                      </ModalContextProvider>
-                    </AddressBlocked>
-                  </AppGlobalStyles>
-                </Web3ContextProvider>
-              </ConnectKitProvider>
-              <ReactQueryDevtools initialIsOpen={false} />
-            </QueryClientProvider>
-          </WagmiProvider>
-        </LanguageProvider>
+        <AaveProvider client={client}>
+          <LanguageProvider>
+            <WagmiProvider config={wagmiConfig}>
+              <QueryClientProvider client={queryClient}>
+                <ConnectKitProvider onDisconnect={cleanLocalStorage}>
+                  <Web3ContextProvider>
+                    <AppGlobalStyles>
+                      <ComplianceProvider>
+                        <AddressBlocked>
+                          <SwapOrdersTrackingProvider>
+                            <ModalContextProvider>
+                              <SharedDependenciesProvider>
+                                <AppDataProvider>
+                                  <GasStationProvider>
+                                    {getLayout(<Component {...pageProps} />)}
+                                    <SupplyModal />
+                                    <FunkitCheckout />
+                                    <WithdrawModal />
+                                    <BorrowModal />
+                                    <RepayModal />
+                                    <CollateralChangeModal />
+                                    <ClaimRewardsModal />
+                                    <EmodeModal />
+                                    <FaucetModal />
+                                    <TransactionEventHandler />
+                                    <StakingMigrateModal />
+                                    <BridgeModal />
+                                    <ReadOnlyModal />
+
+                                    {/* Swap Modals */}
+                                    <SwapModal />
+                                    <CollateralSwapModal />
+                                    <DebtSwapModal />
+                                    <CancelCowOrderModal />
+                                    <CowOrderToast />
+                                  </GasStationProvider>
+                                </AppDataProvider>
+                              </SharedDependenciesProvider>
+                            </ModalContextProvider>
+                          </SwapOrdersTrackingProvider>
+                        </AddressBlocked>
+                      </ComplianceProvider>
+                    </AppGlobalStyles>
+                  </Web3ContextProvider>
+                </ConnectKitProvider>
+                <ReactQueryDevtools initialIsOpen={false} />
+              </QueryClientProvider>
+            </WagmiProvider>
+          </LanguageProvider>
+        </AaveProvider>
       </NoSsr>
     </CacheProvider>
   );

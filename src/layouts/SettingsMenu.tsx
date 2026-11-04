@@ -1,16 +1,17 @@
-import { CogIcon } from '@heroicons/react/solid';
 import { Trans } from '@lingui/macro';
-import { Button, ListItemText, Menu, MenuItem, SvgIcon, Typography } from '@mui/material';
+import { Button, ListItemText, Menu, MenuItem } from '@mui/material';
 import React, { useState } from 'react';
+import { SettingsIcon } from 'src/components/icons/SettingsIcon';
 import { useModalContext } from 'src/hooks/useModal';
 import { DEFAULT_LOCALE } from 'src/libs/LanguageProvider';
 import { useRootStore } from 'src/store/root';
 import { SETTINGS } from 'src/utils/events';
 import { PROD_ENV } from 'src/utils/marketsAndNetworksConfig';
 
-import { DarkModeSwitcher } from './components/DarkModeSwitcher';
 import { LanguageListItem, LanguagesList } from './components/LanguageSwitcher';
+import { ShieldSwitcher } from './components/ShieldSwitcher';
 import { TestNetModeSwitcher } from './components/TestNetModeSwitcher';
+import { ThemeListItem, ThemesList } from './components/ThemeSwitcher';
 
 export const LANG_MAP = {
   en: 'English',
@@ -20,101 +21,77 @@ export const LANG_MAP = {
 };
 type LanguageCode = keyof typeof LANG_MAP;
 
-// Define the type for the language codes
+// The drill-in lists the root menu can hand off to; keys double as the view state.
+const SUBMENUS = { languages: LanguagesList, themes: ThemesList };
 
-// Example usage
+// Shared by the root menu and the submenu so the two can't drift apart.
+const MENU_PROPS = {
+  id: 'settings-menu',
+  MenuListProps: { 'aria-labelledby': 'settings-button' },
+  keepMounted: true,
+};
 
 export function SettingsMenu() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [languagesOpen, setLanguagesOpen] = useState(false);
+  // One exclusive view rather than a boolean per menu — a new submenu costs a union member and a
+  // `SUBMENUS` entry, not another flag to remember to reset. Mirrors `MobileMenu`.
+  const [view, setView] = useState<'settings' | keyof typeof SUBMENUS | null>(null);
   const { openReadMode } = useModalContext();
   const [anchorEl, setAnchorEl] = useState<Element | null>(null);
   const trackEvent = useRootStore((store) => store.trackEvent);
+  const SubmenuList = view && view !== 'settings' ? SUBMENUS[view] : null;
+
   const handleSettingsClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     setAnchorEl(event.currentTarget);
-    setSettingsOpen(true);
-    setLanguagesOpen(false);
+    setView('settings');
   };
 
   const handleLanguageClick = () => {
     const savedLocale = localStorage.getItem('LOCALE') || DEFAULT_LOCALE;
     const langCode = savedLocale as LanguageCode;
-    setSettingsOpen(false);
-    setLanguagesOpen(true);
+    setView('languages');
     trackEvent(SETTINGS.LANGUAGE, { language: LANG_MAP[langCode] });
-  };
-
-  const handleCloseLanguage = () => {
-    setSettingsOpen(true);
-    setLanguagesOpen(false);
   };
 
   const handleClose = () => {
     setAnchorEl(null);
-    setSettingsOpen(false);
-    setLanguagesOpen(false);
+    setView(null);
   };
 
   const handleOpenReadMode = () => {
-    setSettingsOpen(false);
+    setView(null);
     openReadMode();
   };
 
   return (
     <>
       <Button
-        variant="surface"
+        variant="outlined"
         aria-label="settings"
         id="settings-button"
-        aria-controls={settingsOpen ? 'settings-menu' : undefined}
-        aria-expanded={settingsOpen ? 'true' : undefined}
+        aria-controls={view === 'settings' ? 'settings-menu' : undefined}
+        aria-expanded={view === 'settings' ? 'true' : undefined}
         aria-haspopup="true"
         onClick={handleSettingsClick}
-        sx={{ p: '7px 8px', minWidth: 'unset', ml: 2 }}
+        sx={{ p: '0 0.5rem', minWidth: 'unset', ml: '0.62rem' }}
       >
-        <SvgIcon sx={{ color: '#F1F1F3' }} fontSize="small">
-          <CogIcon />
-        </SvgIcon>
+        <SettingsIcon sx={{ fontSize: '20px', color: 'fg-2' }} />
       </Button>
 
-      <Menu
-        id="settings-menu"
-        MenuListProps={{
-          'aria-labelledby': 'settings-button',
-        }}
-        anchorEl={anchorEl}
-        open={settingsOpen}
-        onClose={handleClose}
-        sx={{ '.MuiMenuItem-root.Mui-disabled': { opacity: 1 } }}
-        keepMounted={true}
-      >
-        <MenuItem disabled sx={{ mb: '4px' }}>
-          <Typography variant="subheader2" color="text.secondary">
-            <Trans>Global settings</Trans>
-          </Typography>
-        </MenuItem>
-
-        <DarkModeSwitcher component={MenuItem} />
-        {PROD_ENV && <TestNetModeSwitcher />}
+      <Menu {...MENU_PROPS} anchorEl={anchorEl} open={view === 'settings'} onClose={handleClose}>
+        <ShieldSwitcher component={MenuItem} />
+        {PROD_ENV && <TestNetModeSwitcher component={MenuItem} />}
         <LanguageListItem onClick={handleLanguageClick} component={MenuItem} />
+        <ThemeListItem onClick={() => setView('themes')} component={MenuItem} />
+
         <MenuItem onClick={handleOpenReadMode}>
           <ListItemText>
-            <Trans>Watch wallet</Trans>
+            <Trans>Watch Wallet</Trans>
           </ListItemText>
         </MenuItem>
       </Menu>
 
-      <Menu
-        id="settings-menu"
-        MenuListProps={{
-          'aria-labelledby': 'settings-button',
-        }}
-        anchorEl={anchorEl}
-        open={languagesOpen}
-        onClose={handleClose}
-        keepMounted={true}
-      >
-        <LanguagesList onClick={handleCloseLanguage} component={MenuItem} />
+      <Menu {...MENU_PROPS} anchorEl={anchorEl} open={SubmenuList !== null} onClose={handleClose}>
+        {SubmenuList && <SubmenuList onClick={() => setView('settings')} component={MenuItem} />}
       </Menu>
     </>
   );

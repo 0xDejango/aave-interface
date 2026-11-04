@@ -1,5 +1,5 @@
 import { ChainId } from '@aave/contract-helpers';
-import { ArrowNarrowRightIcon, ExternalLinkIcon, XIcon } from '@heroicons/react/outline';
+import { ArrowNarrowRightIcon, XIcon } from '@heroicons/react/outline';
 import { CheckIcon } from '@heroicons/react/solid';
 import { Trans } from '@lingui/macro';
 import {
@@ -18,6 +18,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { formatUnits } from 'ethers/lib/utils';
 import { useEffect, useState } from 'react';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { DarkTooltip } from 'src/components/infoTooltips/DarkTooltip';
 import { ListColumn } from 'src/components/lists/ListColumn';
 import { ListItem } from 'src/components/lists/ListItem';
@@ -111,21 +112,16 @@ export const BridgeTransactionListItem = ({
       <ListColumn isRow>
         <TokenIcon symbol="GHO" fontSize="large" />
         <Stack sx={{ ml: 2 }} direction="column" alignItems="center">
-          <FormattedNumber
-            sx={{ mb: 1 }}
-            variant="secondary14"
-            visibleDecimals={2}
-            value={amount}
-          />
+          <FormattedNumber sx={{ mb: 1 }} variant="h5" visibleDecimals={2} value={amount} />
           {/* <FormattedNumber
             value={amount}
             symbol="USD"
-            variant="secondary12"
-            color="text.secondary"
+            variant="subheader2"
+            color="fg-2"
           /> */}
         </Stack>
       </ListColumn>
-      <ListColumn align="left">
+      <ListColumn>
         <Stack direction="row" gap={3} alignItems="center">
           <MarketLogo
             sx={{ mr: 0 }}
@@ -138,25 +134,23 @@ export const BridgeTransactionListItem = ({
           <MarketLogo size={28} logo={networkConfigs[destinationChainId].networkLogoPath} />
         </Stack>
       </ListColumn>
-      <ListColumn align="left">
-        <Typography variant="main14">{age}</Typography>
-        <Typography variant="subheader2" color="text.muted">
+      <ListColumn>
+        <Typography variant="subheader1">{age}</Typography>
+        <Typography variant="subheader2" color="fg-3">
           {dayjs.unix(blockTimestamp).format('MMMM D YYYY h:mm A')}
         </Typography>
       </ListColumn>
-      <ListColumn align="left">
+      <ListColumn>
         {executionState === undefined ? (
           <Skeleton width={90} height={35} />
         ) : (
           <TxStatus state={executionState} />
         )}
       </ListColumn>
-      <ListColumn maxWidth={95} minWidth={95} align="left">
+      <ListColumn align="right" maxWidth={95} minWidth={95}>
         <DarkTooltip title="View in explorer" sx={{ display: { xsm: 'none' } }}>
           <IconButton LinkComponent={Link} href={`https://ccip.chain.link/tx/${txHash}`}>
-            <SvgIcon sx={{ fontSize: '16px' }}>
-              <ExternalLinkIcon />
-            </SvgIcon>
+            <ArrowUpRightIcon sx={{ fontSize: '16px' }} />
           </IconButton>
         </DarkTooltip>
       </ListColumn>
@@ -178,25 +172,20 @@ const BridgeTransactionMobileListItem = ({
       <Stack direction="row" my={4} justifyContent="space-between" sx={{ width: '100%' }}>
         <Stack direction="column" gap={2}>
           <Stack>
-            <Typography variant="main14">{age}</Typography>
-            <Typography variant="subheader2" color="text.muted">
+            <Typography variant="subheader1">{age}</Typography>
+            <Typography variant="subheader2" color="fg-3">
               {dayjs.unix(blockTimestamp).format('MMMM D YYYY h:mm A')}
             </Typography>
           </Stack>
           <Stack direction="row">
-            <TokenIcon symbol="GHO" sx={{ fontSize: '40px' }} />
+            <TokenIcon symbol="GHO" fontSize="large" />
             <Stack sx={{ ml: 2 }} direction="column" alignItems="center" justifyContent="center">
-              <FormattedNumber
-                sx={{ mb: 1 }}
-                variant="secondary14"
-                visibleDecimals={2}
-                value={amount}
-              />
+              <FormattedNumber sx={{ mb: 1 }} variant="h5" visibleDecimals={2} value={amount} />
               {/* <FormattedNumber
                 value={amount}
                 symbol="USD"
-                variant="secondary12"
-                color="text.secondary"
+                variant="subheader2"
+                color="fg-2"
               /> */}
             </Stack>
           </Stack>
@@ -222,20 +211,12 @@ const BridgeTransactionMobileListItem = ({
                   pl: 1,
                   pr: 1,
                 }}
-                variant="outlined"
+                variant="tertiary"
                 href={`https://ccip.chain.link/tx/${txHash}`}
                 target="_blank"
               >
                 <Trans>View TX</Trans>{' '}
-                <SvgIcon
-                  sx={{
-                    fontSize: '15px',
-                    pl: 1,
-                    pb: 0.5,
-                  }}
-                >
-                  <ExternalLinkIcon />
-                </SvgIcon>
+                <ArrowUpRightIcon sx={{ fontSize: '15px', pl: 1, pb: 0.5 }} />
               </Button>
             </Stack>
             <Stack direction="row" gap={3} alignItems="center">
@@ -257,15 +238,13 @@ const BridgeTransactionMobileListItem = ({
 };
 
 const TxStatus = ({ state }: { state: MessageExecutionState }) => {
-  const { palette } = useTheme();
-
   switch (state) {
     case MessageExecutionState.UNTOUCHED:
     case MessageExecutionState.IN_PROGRESS:
       return (
         <Stack direction="row" gap={2} alignItems="center">
           <CircularProgress size="12px" />
-          <Typography color={palette.text.muted} variant="main14">
+          <Typography color="fg-3" variant="subheader1">
             Processing
           </Typography>
         </Stack>
@@ -289,7 +268,7 @@ const TxStatus = ({ state }: { state: MessageExecutionState }) => {
               <CheckIcon />
             </SvgIcon>
           </Box>
-          <Typography color={palette.success.main} variant="main14">
+          <Typography color="success.main" variant="subheader1">
             Success
           </Typography>
         </Stack>
@@ -313,7 +292,7 @@ const TxStatus = ({ state }: { state: MessageExecutionState }) => {
               <XIcon />
             </SvgIcon>
           </Box>
-          <Typography color={palette.error.main} variant="main14">
+          <Typography color="error.main" variant="subheader1">
             Failed
           </Typography>
         </Stack>

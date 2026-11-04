@@ -27,7 +27,7 @@ export const SuppliedPositionsListItem = ({
 }: DashboardReserve) => {
   const { user } = useAppDataContext();
   const { isIsolated, aIncentivesData, aTokenAddress, isFrozen, isActive, isPaused } = reserve;
-  const { openSupply, openWithdraw, openCollateralChange, openSwap } = useModalContext();
+  const { openSupply, openWithdraw, openCollateralChange, openCollateralSwap } = useModalContext();
   const { debtCeiling } = useAssetCaps();
   const [trackEvent, currentMarketData, currentMarket] = useRootStore(
     useShallow((store) => [store.trackEvent, store.currentMarketData, store.currentMarket])
@@ -35,9 +35,15 @@ export const SuppliedPositionsListItem = ({
 
   const showSwitchButton = isFeatureEnabled.liquiditySwap(currentMarketData);
 
+  // Check if asset has non-zero liquidation threshold (base or in user's e-mode)
+  const userEMode = reserve.eModes?.find((e) => e.id === user?.userEmodeCategoryId);
+  const hasLiquidationThreshold =
+    reserve.reserveLiquidationThreshold !== '0' ||
+    !!(user?.isInEmode && userEMode?.collateralEnabled);
+
   const canBeEnabledAsCollateral = user
     ? !debtCeiling.isMaxed &&
-      reserve.reserveLiquidationThreshold !== '0' &&
+      hasLiquidationThreshold &&
       ((!reserve.isIsolated && !user.isInIsolationMode) ||
         user.isolatedReserve?.underlyingAsset === reserve.underlyingAsset ||
         (reserve.isIsolated && user.totalCollateralMarketReferenceCurrency === '0'))
@@ -105,6 +111,7 @@ export const SuppliedPositionsListItem = ({
       <ListButtonsColumn>
         {showSwitchButton ? (
           <Button
+            size="small"
             disabled={disableSwap}
             variant="contained"
             onClick={() => {
@@ -116,14 +123,15 @@ export const SuppliedPositionsListItem = ({
                 assetName: reserve.name,
                 asset: underlyingAsset,
               });
-              openSwap(underlyingAsset);
+              openCollateralSwap(underlyingAsset);
             }}
             data-cy={`swapButton`}
           >
-            <Trans>Switch</Trans>
+            <Trans>Swap</Trans>
           </Button>
         ) : (
           <Button
+            size="small"
             disabled={disableSupply}
             variant="contained"
             onClick={() => openSupply(underlyingAsset, currentMarket, reserve.name, 'dashboard')}
@@ -132,8 +140,9 @@ export const SuppliedPositionsListItem = ({
           </Button>
         )}
         <Button
+          size="small"
           disabled={disableWithdraw}
-          variant="outlined"
+          variant="tertiary"
           onClick={() => {
             openWithdraw(underlyingAsset, currentMarket, reserve.name, 'dashboard');
           }}

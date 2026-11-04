@@ -1,9 +1,8 @@
 import { API_ETH_MOCK_ADDRESS } from '@aave/contract-helpers';
 import { valueToBigNumber } from '@aave/math-utils';
 import { Trans } from '@lingui/macro';
-import { Box, Checkbox, Typography } from '@mui/material';
+import { Alert, Box, Checkbox, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
-import { Warning } from 'src/components/primitives/Warning';
 import { ExtendedFormattedUser } from 'src/hooks/app-data-provider/useAppDataProvider';
 import { useModalContext } from 'src/hooks/useModal';
 import { useZeroLTVBlockingWithdraw } from 'src/hooks/useZeroLTVBlockingWithdraw';
@@ -103,6 +102,7 @@ export const WithdrawModalContent = ({
   if (withdrawTxState.success)
     return (
       <TxSuccessView
+        title={<Trans>Withdrawn Successfully</Trans>}
         action={<Trans>withdrew</Trans>}
         amount={amountRef.current}
         symbol={
@@ -167,6 +167,15 @@ export const WithdrawModalContent = ({
               ? currentNetworkConfig.baseAssetSymbol
               : poolReserve.symbol
           }
+          sx={{
+            maxWidth: { xs: '140px', sm: '180px' },
+            '& > span:last-of-type': {
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            },
+          }}
         />
         <DetailsHFLine
           visibleHfChange={!!_amount}
@@ -179,12 +188,12 @@ export const WithdrawModalContent = ({
 
       {displayRiskCheckbox && (
         <>
-          <Warning severity="error" sx={{ my: 6 }}>
+          <Alert severity="error" sx={{ width: '100%', my: 6 }}>
             <Trans>
               Withdrawing this amount will reduce your health factor and increase risk of
               liquidation.
             </Trans>
-          </Warning>
+          </Alert>
           <Box
             sx={{
               display: 'flex',

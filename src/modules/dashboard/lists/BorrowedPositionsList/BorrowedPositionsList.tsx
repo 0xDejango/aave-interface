@@ -3,9 +3,11 @@ import { valueToBigNumber } from '@aave/math-utils';
 import { Trans } from '@lingui/macro';
 import { Typography, useMediaQuery, useTheme } from '@mui/material';
 import { useState } from 'react';
+import { LIST_CARDS_BELOW } from 'src/components/lists/listBreakpoints';
 import { ListColumn } from 'src/components/lists/ListColumn';
 import { ListHeaderTitle } from 'src/components/lists/ListHeaderTitle';
 import { ListHeaderWrapper } from 'src/components/lists/ListHeaderWrapper';
+import { AssetCapsProvider } from 'src/hooks/useAssetCaps';
 import { useRootStore } from 'src/store/root';
 import { fetchIconSymbolAndName } from 'src/ui-config/reservePatches';
 import { GENERAL } from 'src/utils/events';
@@ -26,10 +28,11 @@ import {
 } from '../../../../utils/dashboardSortUtils';
 import { DashboardContentNoData } from '../../DashboardContentNoData';
 import { DashboardEModeButton } from '../../DashboardEModeButton';
+import { isAssetHidden } from '../constants';
 import { ListButtonsColumn } from '../ListButtonsColumn';
 import { ListLoader } from '../ListLoader';
 import { ListTopInfoItem } from '../ListTopInfoItem';
-import { BorrowedPositionsListItemWrapper } from './BorrowedPositionsListItemWrapper';
+import { BorrowedPositionsListItem } from './BorrowedPositionsListItem';
 
 const head = [
   {
@@ -54,7 +57,7 @@ export const BorrowedPositionsList = () => {
   const [sortName, setSortName] = useState('');
   const [sortDesc, setSortDesc] = useState(false);
   const theme = useTheme();
-  const downToXSM = useMediaQuery(theme.breakpoints.down('xsm'));
+  const showCards = useMediaQuery(theme.breakpoints.down(LIST_CARDS_BELOW));
   const showEModeButton = currentMarketData.v3 && Object.keys(eModes).length > 1;
   const [tooltipOpen, setTooltipOpen] = useState<boolean>(false);
 
@@ -105,7 +108,7 @@ export const BorrowedPositionsList = () => {
     'position',
     preSortedReserves,
     true
-  );
+  ).filter((reserve) => !isAssetHidden(currentMarketData.market, reserve.underlyingAsset));
 
   const disableEModeSwitch =
     user.isInEmode &&
@@ -116,7 +119,7 @@ export const BorrowedPositionsList = () => {
   const RenderHeader: React.FC = () => {
     return (
       <ListHeaderWrapper>
-        {head.map((col) => (
+        {head.map((col, index) => (
           <ListColumn
             isRow={col.sortKey === 'symbol'}
             maxWidth={col.sortKey === 'symbol' ? DASHBOARD_LIST_COLUMN_WIDTHS.ASSET : undefined}
@@ -129,12 +132,13 @@ export const BorrowedPositionsList = () => {
               setSortDesc={setSortDesc}
               sortKey={col.sortKey}
               source="Borrowed Positions Dashboard"
+              noTruncate={index === head.length - 1}
             >
               {col.title}
             </ListHeaderTitle>
           </ListColumn>
         ))}
-        <ListButtonsColumn isColumnHeader />
+        <ListButtonsColumn />
       </ListHeaderWrapper>
     );
   };
@@ -194,13 +198,14 @@ export const BorrowedPositionsList = () => {
     >
       {sortedReserves.length ? (
         <>
-          {!downToXSM && <RenderHeader />}
+          {!showCards && <RenderHeader />}
           {sortedReserves.map((item) => (
-            <BorrowedPositionsListItemWrapper
-              item={item}
+            <AssetCapsProvider
+              asset={item.reserve}
               key={item.underlyingAsset + item.borrowRateMode}
-              disableEModeSwitch={disableEModeSwitch}
-            />
+            >
+              <BorrowedPositionsListItem item={item} disableEModeSwitch={disableEModeSwitch} />
+            </AssetCapsProvider>
           ))}
         </>
       ) : (

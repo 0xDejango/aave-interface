@@ -1,33 +1,26 @@
-import {
-  ComputedUserReserve,
-  FormattedGhoReserveData,
-  FormattedGhoUserData,
-  formatUserSummaryWithDiscount,
-  USD_DECIMALS,
-  UserReserveData,
-} from '@aave/math-utils';
-import { AaveV3Ethereum } from '@bgd-labs/aave-address-book';
-import { formatUnits } from 'ethers/lib/utils';
+import type { EmodeMarketCategory, Market, MarketUserState, Reserve } from '@aave/graphql';
+import { UserReserveData } from '@aave/math-utils';
+import { client } from 'pages/_app.page';
 import React, { PropsWithChildren, useContext } from 'react';
 import { EmodeCategory } from 'src/helpers/types';
 import { useWeb3Context } from 'src/libs/hooks/useWeb3Context';
 import { useRootStore } from 'src/store/root';
-import { GHO_MINTING_MARKETS } from 'src/utils/ghoUtilities';
+import { fetchIconSymbolAndName } from 'src/ui-config/reservePatches';
 
 import { formatEmodes } from '../../store/poolSelectors';
 import {
   ExtendedFormattedUser as _ExtendedFormattedUser,
   useExtendedUserSummaryAndIncentives,
 } from '../pool/useExtendedUserSummaryAndIncentives';
-import { useGhoPoolFormattedReserve } from '../pool/useGhoPoolFormattedReserve';
 import {
   FormattedReservesAndIncentives,
   usePoolFormattedReserves,
 } from '../pool/usePoolFormattedReserves';
 import { usePoolReservesHumanized } from '../pool/usePoolReserves';
-import { useUserGhoPoolFormattedReserve } from '../pool/useUserGhoPoolFormattedReserve';
+import { usePoolSupportsMulticall } from '../pool/usePoolSupportsMulticall';
 import { useUserPoolReservesHumanized } from '../pool/useUserPoolReserves';
 import { FormattedUserReserves } from '../pool/useUserSummaryAndIncentives';
+import { useMarketsData } from './useMarketsData';
 
 /**
  * removes the marketPrefix from a symbol
@@ -52,19 +45,25 @@ export type ComputedUserReserveData = FormattedUserReserves;
  * @deprecated Use ExtendedFormattedUser type from useExtendedUserSummaryAndIncentives hook
  */
 export type ExtendedFormattedUser = _ExtendedFormattedUser;
-
+export type ReserveWithId = Reserve & { id: string };
 export interface AppDataContextType {
   loading: boolean;
+  /** SDK market snapshot */
+  market?: Market;
+  totalBorrows?: number;
+  supplyReserves: ReserveWithId[];
+  borrowReserves: ReserveWithId[];
+  eModeCategories: EmodeMarketCategory[];
+  userState?: MarketUserState;
+  /** Legacy fields (deprecated) kept temporarily for incremental migration */
   reserves: ComputedReserveData[];
   eModes: Record<number, EmodeCategory>;
+  /** Pool.multicall exists (POOL_REVISION >= 8) */
+  poolSupportsMulticall: boolean;
   user?: ExtendedFormattedUser;
   marketReferencePriceInUsd: string;
   marketReferenceCurrencyDecimals: number;
   userReserves: UserReserveData[];
-  ghoReserveData: FormattedGhoReserveData;
-  ghoUserData: FormattedGhoUserData;
-  ghoLoadingData: boolean;
-  ghoUserLoadingData: boolean;
 }
 
 const AppDataContext = React.createContext<AppDataContextType>({} as AppDataContextType);
@@ -77,8 +76,49 @@ export const AppDataProvider: React.FC<PropsWithChildren> = ({ children }) => {
   const { currentAccount } = useWeb3Context();
 
   const currentMarketData = useRootStore((state) => state.currentMarketData);
-  const currentMarket = useRootStore((state) => state.currentMarket);
-  // pool hooks
+
+  const { data, isPending } = useMarketsData({
+    client,
+    marketData: currentMarketData,
+    account: currentAccount,
+  });
+
+  const marketAddress = currentMarketData.addresses.LENDING_POOL.toLowerCase();
+
+  const sdkMarket = data?.find((item) => item.address.toLowerCase() === marketAddress);
+
+  const totalBorrows = sdkMarket?.borrowReserves.reduce((acc, reserve) => {
+    const value = reserve.borrowInfo?.total?.usd ?? 0;
+    return acc + Number(value);
+  }, 0);
+
+  const patchUnderlyingToken = (reserve: Reserve) => {
+    const patch = fetchIconSymbolAndName({
+      underlyingAsset: reserve.underlyingToken.address,
+      symbol: reserve.underlyingToken.symbol,
+      name: reserve.underlyingToken.name,
+    });
+    return {
+      ...reserve.underlyingToken,
+      name: patch.name ?? reserve.underlyingToken.name,
+      symbol: patch.symbol ?? reserve.underlyingToken.symbol,
+    };
+  };
+
+  const supplyReserves = (sdkMarket?.supplyReserves ?? []).map((reserve) => ({
+    ...reserve,
+    underlyingToken: patchUnderlyingToken(reserve),
+    id: `${sdkMarket?.address}-${reserve.underlyingToken.address}`,
+  }));
+
+  const borrowReserves = (sdkMarket?.borrowReserves ?? []).map((reserve) => ({
+    ...reserve,
+    underlyingToken: patchUnderlyingToken(reserve),
+    id: `${sdkMarket?.address}-${reserve.underlyingToken.address}`,
+  }));
+
+  const eModeCategories = sdkMarket?.eModeCategories ?? [];
+  const marketUserState = sdkMarket?.userState ?? undefined;
 
   const { data: reservesData, isPending: reservesDataLoading } =
     usePoolReservesHumanized(currentMarketData);
@@ -89,116 +129,38 @@ export const AppDataProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
   const eModes = formattedPoolReserves ? formatEmodes(formattedPoolReserves) : {};
 
+  const { data: poolSupportsMulticall } = usePoolSupportsMulticall(currentMarketData);
+
   const { data: userReservesData, isPending: userReservesDataLoading } =
     useUserPoolReservesHumanized(currentMarketData);
   const { data: userSummary, isPending: userSummaryLoading } =
     useExtendedUserSummaryAndIncentives(currentMarketData);
   const userReserves = userReservesData?.userReserves;
 
-  // gho hooks
-  const { data: formattedGhoUserData, isPending: isGhoUserDataLoading } =
-    useUserGhoPoolFormattedReserve(currentMarketData);
-  const { data: formattedGhoReserveData, isPending: ghoReserveDataLoading } =
-    useGhoPoolFormattedReserve(currentMarketData);
-
-  const formattedGhoReserveDataWithDefault = formattedGhoReserveData || {
-    aaveFacilitatorRemainingCapacity: 0,
-    aaveFacilitatorMintedPercent: 0,
-    aaveFacilitatorBucketLevel: 0,
-    aaveFacilitatorBucketMaxCapacity: 0,
-    ghoBorrowAPYWithMaxDiscount: 0,
-    ghoBaseVariableBorrowRate: 0,
-    ghoVariableBorrowAPY: 0,
-    ghoDiscountedPerToken: 0,
-    ghoDiscountRate: 0,
-    ghoMinDebtTokenBalanceForDiscount: 0,
-    ghoMinDiscountTokenBalanceForDiscount: 0,
-  };
-
-  const formattedGhoUserDataWithDefault = formattedGhoUserData || {
-    userGhoDiscountPercent: 0,
-    userDiscountTokenBalance: 0,
-    userGhoBorrowBalance: 0,
-    userDiscountedGhoInterest: 0,
-    userGhoAvailableToBorrowAtDiscount: 0,
-  };
-
   // loading
   const isReservesLoading = reservesDataLoading || formattedPoolReservesLoading;
   const isUserDataLoading = userReservesDataLoading || userSummaryLoading;
 
-  let user = userSummary;
-  // Factor discounted GHO interest into cumulative user fields
-
-  const isGhoInMarket = GHO_MINTING_MARKETS.includes(currentMarket);
-
-  if (isGhoInMarket && reservesData && formattedGhoUserData) {
-    const baseCurrencyData = reservesData.baseCurrencyData;
-    if (formattedGhoUserData.userDiscountedGhoInterest > 0 && user) {
-      const userSummaryWithDiscount = formatUserSummaryWithDiscount({
-        userGhoDiscountedInterest: formattedGhoUserData.userDiscountedGhoInterest,
-        user,
-        marketReferenceCurrencyPriceUSD: Number(
-          formatUnits(baseCurrencyData.marketReferenceCurrencyPriceInUsd, USD_DECIMALS)
-        ),
-      });
-
-      const userGhoReserve = user.userReservesData.find(
-        (r) => r.reserve.underlyingAsset === AaveV3Ethereum.ASSETS.GHO.UNDERLYING.toLowerCase()
-      );
-
-      if (!userGhoReserve) {
-        throw new Error('GHO reserve not found in user reserves data');
-      }
-
-      const mergeUserReserves = (reserve: ComputedUserReserve<FormattedReservesAndIncentives>) => {
-        if (reserve.underlyingAsset !== AaveV3Ethereum.ASSETS.GHO.UNDERLYING.toLowerCase()) {
-          return reserve;
-        }
-
-        if (reserve.variableBorrows === '0') {
-          return reserve;
-        }
-
-        // This amount takes into account the discount applied on the accrued interest.
-        const userGhoDebtBalance = formattedGhoUserData.userGhoBorrowBalance.toString();
-
-        // Merge with the user reserves so the correct debt balance can be shown throughout the app.
-        return {
-          ...reserve,
-          variableBorrows: userGhoDebtBalance,
-          variableBorrowsUSD: userGhoDebtBalance,
-          totalBorrowsUSD: userGhoDebtBalance,
-          totalBorrows: userGhoDebtBalance,
-          totalBorrowsMarketReferenceCurrency: userGhoDebtBalance,
-        };
-      };
-
-      user = {
-        ...user,
-        ...userSummaryWithDiscount,
-        userReservesData: user.userReservesData.map(mergeUserReserves),
-      };
-    }
-  }
+  const loading = isPending || isReservesLoading || (!!currentAccount && isUserDataLoading);
 
   return (
     <AppDataContext.Provider
       value={{
-        loading: isReservesLoading || (!!currentAccount && isUserDataLoading),
+        loading,
+        market: sdkMarket,
+        totalBorrows,
+        supplyReserves,
+        borrowReserves,
+        eModeCategories,
+        userState: marketUserState,
+        // Legacy fields (to be removed once consumers migrate)
         reserves: formattedPoolReserves || [],
         eModes,
-        user,
+        poolSupportsMulticall: poolSupportsMulticall ?? false,
+        user: userSummary,
         userReserves: userReserves || [],
         marketReferencePriceInUsd: baseCurrencyData?.marketReferenceCurrencyPriceInUsd || '0',
         marketReferenceCurrencyDecimals: baseCurrencyData?.marketReferenceCurrencyDecimals || 0,
-        // TODO: we should consider removing this from the context and use zustand instead. If we had a selector that would return the formatted gho data, I think that
-        // would work out pretty well. We could even extend that pattern for the other reserves, and migrate towards the global store instead of the app data provider.
-        // ghoLoadingData for now is just propagated through to reduce changes to other components.
-        ghoReserveData: formattedGhoReserveDataWithDefault,
-        ghoUserData: formattedGhoUserDataWithDefault,
-        ghoLoadingData: ghoReserveDataLoading,
-        ghoUserLoadingData: !!currentAccount && isGhoUserDataLoading,
       }}
     >
       {children}

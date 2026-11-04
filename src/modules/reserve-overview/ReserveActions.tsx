@@ -1,15 +1,14 @@
 import { API_ETH_MOCK_ADDRESS } from '@aave/contract-helpers';
 import { BigNumberValue, USD_DECIMALS, valueToBigNumber } from '@aave/math-utils';
 import { Trans } from '@lingui/macro';
-import { Box, Button, Divider, Paper, Skeleton, Stack, Typography, useTheme } from '@mui/material';
-import { BigNumber } from 'bignumber.js';
+import { Alert, Box, Button, Divider, Paper, Skeleton, Stack, Typography } from '@mui/material';
 import React, { ReactNode, useState } from 'react';
 import { WalletIcon } from 'src/components/icons/WalletIcon';
 import { getMarketInfoById } from 'src/components/MarketSwitcher';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
-import { Warning } from 'src/components/primitives/Warning';
 import { StyledTxModalToggleButton } from 'src/components/StyledToggleButton';
 import { StyledTxModalToggleGroup } from 'src/components/StyledToggleButtonGroup';
+import { FunSupplyButton } from 'src/components/transactions/FunCheckout/FunSupplyButton';
 import { ConnectWalletButton } from 'src/components/WalletConnection/ConnectWalletButton';
 import {
   ComputedReserveData,
@@ -20,13 +19,14 @@ import { useModalContext } from 'src/hooks/useModal';
 import { useWeb3Context } from 'src/libs/hooks/useWeb3Context';
 import { BuyWithFiat } from 'src/modules/staking/BuyWithFiat';
 import { useRootStore } from 'src/store/root';
+import { cardPaddingSx } from 'src/utils/cardStyles';
 import { GENERAL } from 'src/utils/events';
+import { figVars } from 'src/utils/figmaColors';
 import {
+  assetCanBeBorrowedByUser,
   getMaxAmountAvailableToBorrow,
-  getMaxGhoMintAmount,
 } from 'src/utils/getMaxAmountAvailableToBorrow';
 import { getMaxAmountAvailableToSupply } from 'src/utils/getMaxAmountAvailableToSupply';
-import { displayGhoForMintableMarket } from 'src/utils/ghoUtilities';
 import { amountToUsd } from 'src/utils/utils';
 import { useShallow } from 'zustand/shallow';
 
@@ -55,7 +55,7 @@ export const ReserveActions = ({ reserve }: ReserveActionsProps) => {
   const [selectedAsset, setSelectedAsset] = useState<string>(reserve.symbol);
 
   const { currentAccount } = useWeb3Context();
-  const { openBorrow, openSupply } = useModalContext();
+  const { openBorrow } = useModalContext();
   const [currentMarket, currentNetworkConfig, currentMarketData, minRemainingBaseTokenBalance] =
     useRootStore(
       useShallow((store) => [
@@ -65,12 +65,7 @@ export const ReserveActions = ({ reserve }: ReserveActionsProps) => {
         store.poolComputed.minRemainingBaseTokenBalance,
       ])
     );
-  const {
-    ghoReserveData,
-    user,
-    loading: loadingReserves,
-    marketReferencePriceInUsd,
-  } = useAppDataContext();
+  const { user, loading: loadingReserves, marketReferencePriceInUsd } = useAppDataContext();
   const { walletBalances, loading: loadingWalletBalance } = useWalletBalances(currentMarketData);
   const { baseAssetSymbol } = currentNetworkConfig;
   let balance = walletBalances[reserve.underlyingAsset];
@@ -80,16 +75,8 @@ export const ReserveActions = ({ reserve }: ReserveActionsProps) => {
 
   let maxAmountToBorrow = '0';
   let maxAmountToSupply = '0';
-  const isGho = displayGhoForMintableMarket({ symbol: reserve.symbol, currentMarket });
 
-  if (isGho && user) {
-    const maxMintAmount = getMaxGhoMintAmount(user, reserve);
-    maxAmountToBorrow = BigNumber.min(
-      maxMintAmount,
-      valueToBigNumber(ghoReserveData.aaveFacilitatorRemainingCapacity)
-    ).toString();
-    maxAmountToSupply = '0';
-  } else if (user) {
+  if (user) {
     maxAmountToBorrow = getMaxAmountAvailableToBorrow(reserve, user).toString();
 
     maxAmountToSupply = getMaxAmountAvailableToSupply(
@@ -127,13 +114,21 @@ export const ReserveActions = ({ reserve }: ReserveActionsProps) => {
     return <ActionsSkeleton />;
   }
 
-  const onSupplyClicked = () => {
-    if (reserve.isWrappedBaseAsset && selectedAsset === baseAssetSymbol) {
-      openSupply(API_ETH_MOCK_ADDRESS.toLowerCase(), currentMarket, reserve.name, 'reserve', true);
-    } else {
-      openSupply(reserve.underlyingAsset, currentMarket, reserve.name, 'reserve', true);
-    }
-  };
+  // The native supply flow on this page can supply the wrapped base asset's
+  // underlying as native ETH (mock address) when the toggle selects it.
+  const supplyUnderlyingAsset =
+    reserve.isWrappedBaseAsset && selectedAsset === baseAssetSymbol
+      ? API_ETH_MOCK_ADDRESS.toLowerCase()
+      : reserve.underlyingAsset;
+
+  // Collateral flag shown in the funkit checkout — mirror the dashboard list by
+  // using the user's actual per-position toggle, falling back to reserve-level
+  // eligibility when they hold no position yet. Matched on the real underlying
+  // (not the wrapped-base-asset's native-mock address) so an existing position
+  // is found.
+  const collateralEnabled =
+    user?.userReservesData.find((r) => r.reserve.underlyingAsset === reserve.underlyingAsset)
+      ?.usageAsCollateralEnabledOnUser ?? reserve.usageAsCollateralEnabled;
 
   const { market } = getMarketInfoById(currentMarket);
 
@@ -160,17 +155,17 @@ export const ReserveActions = ({ reserve }: ReserveActionsProps) => {
         <>
           <Divider sx={{ my: 6 }} />
           <Stack gap={3}>
-            {!isGho && (
-              <SupplyAction
-                reserve={reserve}
-                value={maxAmountToSupply.toString()}
-                usdValue={maxAmountToSupplyUsd}
-                symbol={selectedAsset}
-                disable={disableSupplyButton}
-                onActionClicked={onSupplyClicked}
-              />
-            )}
-            {reserve.borrowingEnabled && (
+            <SupplyAction
+              reserve={reserve}
+              value={maxAmountToSupply.toString()}
+              usdValue={maxAmountToSupplyUsd}
+              symbol={selectedAsset}
+              disable={disableSupplyButton}
+              underlyingAsset={supplyUnderlyingAsset}
+              collateralEnabled={collateralEnabled}
+              walletBalance={balance?.amount || '0'}
+            />
+            {assetCanBeBorrowedByUser(reserve, user) && (
               <BorrowAction
                 reserve={reserve}
                 value={maxAmountToBorrow.toString()}
@@ -192,20 +187,20 @@ export const ReserveActions = ({ reserve }: ReserveActionsProps) => {
 
 const PauseWarning = () => {
   return (
-    <Warning sx={{ mb: 0 }} severity="error" icon={true}>
+    <Alert sx={{ width: '100%', mb: 0 }} severity="error">
       <Trans>Because this asset is paused, no actions can be taken until further notice</Trans>
-    </Warning>
+    </Alert>
   );
 };
 
 const FrozenWarning = () => {
   return (
-    <Warning sx={{ mb: 0 }} severity="error" icon={true}>
+    <Alert sx={{ width: '100%', mb: 0 }} severity="error">
       <Trans>
         Since this asset is frozen, the only available actions are withdraw and repay which can be
         accessed from the <Link href={ROUTES.dashboard}>Dashboard</Link>
       </Trans>
-    </Warning>
+    </Alert>
   );
 };
 
@@ -250,7 +245,7 @@ const ActionsSkeleton = () => {
 
 const PaperWrapper = ({ children }: { children: ReactNode }) => {
   return (
-    <Paper sx={{ pt: 4, pb: { xs: 4, xsm: 6 }, px: { xs: 4, xsm: 6 } }}>
+    <Paper variant="card" sx={cardPaddingSx}>
       <Typography variant="h3" sx={{ mb: 6 }}>
         <Trans>Your info</Trans>
       </Typography>
@@ -262,12 +257,12 @@ const PaperWrapper = ({ children }: { children: ReactNode }) => {
 
 const ConnectWallet = () => {
   return (
-    <Paper sx={{ pt: 4, pb: { xs: 4, xsm: 6 }, px: { xs: 4, xsm: 6 } }}>
+    <Paper variant="card" sx={cardPaddingSx}>
       <>
         <Typography variant="h3" sx={{ mb: { xs: 6, xsm: 10 } }}>
           <Trans>Your info</Trans>
         </Typography>
-        <Typography sx={{ mb: 6 }} color="text.secondary">
+        <Typography sx={{ mb: 6 }} color="fg-2">
           <Trans>Please connect a wallet to view your personal information here.</Trans>
         </Typography>
         <ConnectWalletButton />
@@ -291,8 +286,14 @@ const SupplyAction = ({
   usdValue,
   symbol,
   disable,
-  onActionClicked,
-}: ActionProps) => {
+  underlyingAsset,
+  collateralEnabled,
+  walletBalance,
+}: Omit<ActionProps, 'onActionClicked'> & {
+  underlyingAsset: string;
+  collateralEnabled: boolean;
+  walletBalance: string;
+}) => {
   return (
     <Stack>
       <AvailableTooltip
@@ -319,21 +320,28 @@ const SupplyAction = ({
           <FormattedNumber
             value={usdValue}
             variant="subheader2"
-            color="text.muted"
-            symbolsColor="text.muted"
+            color="fg-3"
+            symbolsColor="fg-3"
             symbol="USD"
           />
         </Box>
-        <Button
+        <FunSupplyButton
           sx={{ height: '36px', width: '96px' }}
-          onClick={onActionClicked}
           disabled={disable}
           fullWidth={false}
           variant="contained"
+          size="medium"
           data-cy="supplyButton"
-        >
-          <Trans>Supply</Trans>
-        </Button>
+          underlyingAsset={underlyingAsset}
+          name={reserve.name}
+          symbol={symbol}
+          iconSymbol={reserve.iconSymbol}
+          supplyAPY={reserve.supplyAPY}
+          collateralEnabled={collateralEnabled}
+          walletBalance={walletBalance}
+          funnel="reserve"
+          isReserve
+        />
       </Stack>
     </Stack>
   );
@@ -373,8 +381,8 @@ const BorrowAction = ({
           <FormattedNumber
             value={usdValue}
             variant="subheader2"
-            color="text.muted"
-            symbolsColor="text.muted"
+            color="fg-3"
+            symbolsColor="fg-3"
             symbol="USD"
           />
         </Box>
@@ -413,11 +421,11 @@ const WrappedBaseAssetSelector = ({
       sx={{ mb: 4 }}
     >
       <StyledTxModalToggleButton value={assetSymbol}>
-        <Typography variant="buttonM">{assetSymbol}</Typography>
+        <Typography variant="h5">{assetSymbol}</Typography>
       </StyledTxModalToggleButton>
 
       <StyledTxModalToggleButton value={baseAssetSymbol}>
-        <Typography variant="buttonM">{baseAssetSymbol}</Typography>
+        <Typography variant="h5">{baseAssetSymbol}</Typography>
       </StyledTxModalToggleButton>
     </StyledTxModalToggleGroup>
   );
@@ -432,8 +440,8 @@ interface ValueWithSymbolProps {
 const ValueWithSymbol = ({ value, symbol, children }: ValueWithSymbolProps) => {
   return (
     <Stack direction="row" alignItems="center" gap={1}>
-      <FormattedNumber value={value} variant="h4" color="text.primary" />
-      <Typography variant="buttonL" color="text.secondary">
+      <FormattedNumber value={value} variant="h4" color="fg-1" />
+      <Typography variant="buttonL" color="fg-2">
         {symbol}
       </Typography>
       {children}
@@ -446,27 +454,25 @@ interface WalletBalanceProps {
   symbol: string;
   marketTitle: string;
 }
-const WalletBalance = ({ balance, symbol, marketTitle }: WalletBalanceProps) => {
-  const theme = useTheme();
-
+export const WalletBalance = ({ balance, symbol, marketTitle }: WalletBalanceProps) => {
   return (
     <Stack direction="row" gap={3}>
       <Box
-        sx={(theme) => ({
+        sx={{
           width: '42px',
           height: '42px',
-          background: theme.palette.background.surface,
-          border: `0.5px solid ${theme.palette.background.disabled}`,
+          background: figVars['bg-2'],
+          border: `0.5px solid ${figVars['bg-6']}`,
           borderRadius: '12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-        })}
+        }}
       >
-        <WalletIcon sx={{ stroke: `${theme.palette.text.secondary}` }} />
+        <WalletIcon sx={{ stroke: `${figVars['fg-2']}` }} />
       </Box>
       <Box>
-        <Typography variant="description" color="text.secondary">
+        <Typography variant="description" color="fg-2">
           Wallet balance
         </Typography>
         <ValueWithSymbol value={balance} symbol={symbol}>

@@ -1,10 +1,11 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
 import { configEnvWithTenderlyAvalancheFork } from '../../../../support/steps/configuration.steps';
 import { borrow, repay, supply, withdraw } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aAVAXAvalancheV3: 9000,
@@ -76,7 +77,6 @@ describe('WBTC INTEGRATION SPEC, AVALANCHE V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyAvalancheFork({
     market: 'fork_proto_avalanche_v3',
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

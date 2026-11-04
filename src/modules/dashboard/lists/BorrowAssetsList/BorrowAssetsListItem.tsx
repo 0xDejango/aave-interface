@@ -5,13 +5,14 @@ import { useModalContext } from 'src/hooks/useModal';
 import { useRootStore } from 'src/store/root';
 import { DashboardReserve } from 'src/utils/dashboardSortUtils';
 import { DASHBOARD } from 'src/utils/events';
+import { displayGhoForMintableMarket } from 'src/utils/ghoUtilities';
 import { showExternalIncentivesTooltip } from 'src/utils/utils';
 import { useShallow } from 'zustand/shallow';
 
 import { CapsHint } from '../../../../components/caps/CapsHint';
 import { CapType } from '../../../../components/caps/helper';
 import { Link, ROUTES } from '../../../../components/primitives/Link';
-import { ListAPRColumn } from '../ListAPRColumn';
+import { ListAPRColumn, ListGhoAPRColumn } from '../ListAPRColumn';
 import { ListButtonsColumn } from '../ListButtonsColumn';
 import { ListItemWrapper } from '../ListItemWrapper';
 import { ListValueColumn } from '../ListValueColumn';
@@ -37,6 +38,11 @@ export const BorrowAssetsListItem = ({
   const [trackEvent, currentMarket] = useRootStore(
     useShallow((store) => [store.trackEvent, store.currentMarket])
   );
+
+  const isGho = displayGhoForMintableMarket({
+    symbol,
+    currentMarket,
+  });
 
   return (
     <ListItemWrapper
@@ -67,18 +73,31 @@ export const BorrowAssetsListItem = ({
           />
         }
       />
-      <ListAPRColumn
-        value={Number(variableBorrowRate)}
-        market={currentMarket}
-        protocolAction={ProtocolAction.borrow}
-        address={variableDebtTokenAddress}
-        incentives={vIncentivesData}
-        symbol={symbol}
-      />
+      {isGho ? (
+        <ListGhoAPRColumn
+          value={Number(variableBorrowRate)}
+          market={currentMarket}
+          protocolAction={ProtocolAction.borrow}
+          address={variableDebtTokenAddress}
+          incentives={vIncentivesData}
+          symbol={symbol}
+        />
+      ) : (
+        <ListAPRColumn
+          value={Number(variableBorrowRate)}
+          market={currentMarket}
+          protocolAction={ProtocolAction.borrow}
+          address={variableDebtTokenAddress}
+          incentives={vIncentivesData}
+          symbol={symbol}
+        />
+      )}
+
       <ListButtonsColumn>
         <Button
+          size="small"
           disabled={disableBorrow}
-          variant="contained"
+          variant="tertiary"
           onClick={() => {
             openBorrow(underlyingAsset, currentMarket, name, 'dashboard');
           }}
@@ -86,7 +105,8 @@ export const BorrowAssetsListItem = ({
           <Trans>Borrow</Trans>
         </Button>
         <Button
-          variant="outlined"
+          size="small"
+          variant="tertiary"
           component={Link}
           href={ROUTES.reserveOverview(underlyingAsset, currentMarket)}
           onClick={() => {

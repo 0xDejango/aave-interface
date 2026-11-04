@@ -1,12 +1,15 @@
 export const AUTH = {
-  CONNECT_WALLET: 'Connect wallet', //done
-  SWITCH_WALLET: 'Switch wallet', //done
-  MOCK_WALLET: 'Mock wallet', //done
-  DISCONNECT_WALLET: 'Disconnect wallet', //done
-  COPY_ADDRESS: 'Copy address', // done
-  VIEW_EXPLORER: 'View explorer', // done
-  VIEW_TX_HISTORY: 'View Tx History',
-};
+  CONNECT_WALLET: 'Connect Wallet',
+  SWITCH_WALLET: 'Switch Wallet',
+  MOCK_WALLET: 'Mock Wallet',
+  DISCONNECT_WALLET: 'Disconnect Wallet',
+  COPY_ADDRESS: 'Copy Address',
+  VIEW_EXPLORER: 'View Explorer',
+  VIEW_TX_HISTORY: 'View Transaction History',
+  WALLET_CONNECT_START: 'Wallet Connect Start',
+  WALLET_CONNECT_SUCCESS: 'Wallet Connect Success',
+  WALLET_CONNECT_ABORT: 'Wallet Connect Abort',
+} as const;
 
 export const GENERAL = {
   SWITCH_NETWORK: 'Switch network',
@@ -17,10 +20,61 @@ export const GENERAL = {
   TOKEN_APPROVAL: 'Token Approval',
   ACCEPT_RISK: 'Accept Risk',
   TRANSACTION: 'Transaction',
+  SWAP: 'Swap',
+  SWAP_FAILED: 'Swap Failed',
+  SWAP_COMPLETED: 'Swap Completed',
+  COLLATERAL_SWAP_WITHOUT_FLASHLOAN: 'Collateral Swap without Flashloan',
+  COLLATERAL_SWAP_WITH_FLASHLOAN: 'Collateral Swap with Flashloan',
   TRANSACTION_ERROR: 'Transaction Error',
   OPEN_MODAL: 'Open Modal',
   MAX_INPUT_SELECTION: 'Select Max input',
+  LIMIT_ORDER: 'Limit Order',
 };
+
+export const FUNKIT = {
+  CHECKOUT_STARTED: 'Funkit Checkout Started',
+  CHECKOUT_COMPLETED: 'Funkit Checkout Completed',
+  CHECKOUT_ERROR: 'Funkit Checkout Error',
+} as const;
+
+export enum SWAP {
+  /// The user has requested a quote
+  QUOTE = 'SWAP_QUOTE',
+
+  /// The quote has been refreshed
+  QUOTE_REFRESHED = 'SWAP_QUOTE_REFRESHED',
+
+  /// The user has changed inputs
+  INPUT_CHANGES = 'SWAP_INPUT_CHANGES',
+
+  /// An error has occurred
+  ERROR = 'SWAP_ERROR',
+
+  /// The user sent the approval transaction
+  APPROVAL = 'SWAP_APPROVAL',
+
+  /// The user has sent the swap order
+  SWAP = 'SWAP_EXECUTION',
+
+  /// The user's order has been filled
+  SWAP_FILLED = 'SWAP_FILLED',
+
+  /// The user's order has failed
+  SWAP_FAILED = 'SWAP_FAILED',
+
+  /// The user denied a wallet request
+  USER_DENIED = 'SWAP_USER_DENIED_WALLET_REQUEST',
+
+  /// The user has encountered a gas estimation error
+  GAS_ESTIMATION_ERROR = 'SWAP_GAS_ESTIMATION_ERROR',
+}
+
+export const REWARDS = {
+  CLAIM_ALL_REWARDS: 'Claim All Rewards',
+  CLAIM_PROTOCOL_REWARDS: 'Claim Protocol Rewards',
+  CLAIM_MERIT_REWARDS: 'Claim Merit Rewards',
+  CLAIM_INDIVIDUAL_REWARD: 'Claim Individual Reward',
+} as const;
 
 export const DASHBOARD = {
   CHANGE_MARKET: 'Change market on dashboard', //done
@@ -33,6 +87,7 @@ export const DASHBOARD = {
   NOTIFY_DASHBOARD: 'Notify dashboard', // done
   TILE_VISBILITY: 'Tile visibility',
   SHOW_ASSETS_0_BALANCE: 'Show assets with zero balance dashboard', // done
+  SHOW_ASSETS_SMALL_BALANCE: 'Show assets with small balance dashboard',
   SELECT_V3_ETH_MARKET: 'Clicks a V3 ETH market from dashboard', // done
 };
 
@@ -74,8 +129,21 @@ export const WITHDRAW_MODAL = {
   SWITCH_WITHDRAW_TYPE: 'Change withdraw type',
 };
 
+export const SAFETY_MODULE = {
+  STAKE_SAFETY_MODULE: 'Stake Safety Module',
+  OPEN_STAKE_MODAL: 'Open Safety Module Stake Modal',
+  OPEN_COOLDOWN_MODAL: 'Open Safety Module Cooldown Modal',
+  OPEN_WITHDRAW_MODAL: 'Open Safety Module Withdraw Modal',
+  OPEN_CLAIM_MODAL: 'Open Safety Module Claim Modal',
+  OPEN_MIGRATE_MODAL: 'Open Safety Module Migrate Modal',
+};
+
 export const STAKE = {
-  STAKE_TOKEN: 'Stake Action',
+  STAKE_TOKEN: 'Stake Umbrella Action',
+  OPEN_STAKE_MODAL: 'Open Stake Modal',
+  OPEN_COOLDOWN_MODAL: 'Open Stake Cooldown Modal',
+  OPEN_WITHDRAW_MODAL: 'Open Stake Withdraw Modal',
+  OPEN_CLAIM_MODAL: 'Open Stake Claim Modal',
 };
 
 export const GOVERNANCE_PAGE = {
@@ -88,7 +156,6 @@ export const AIP = {
   VIEW_ALL_VOTES: 'View all votes modal AIP page', //done (not sure why we don't use normal modal context)
   VOTE: 'Vote on proposal transaction', //need help
   GO_BACK: 'GO Back: AIP', //done
-  SHARE_VOTE_ON_LENS: 'Share vote to lens: Vote Modal', //done
 };
 export const NAV_BAR = {
   MAIN_MENU: 'Main menu navigation', //done
@@ -97,10 +164,12 @@ export const NAV_BAR = {
 };
 
 export const SETTINGS = {
-  DARK_MODE: 'Dark Mode Toggle',
   TESTNET_MODE: 'Testnet mode toggled: ',
   LANGUAGE: 'Language selector',
   LANGUAGE_SELECTED: 'Language selected',
+  THEME: 'Theme selector',
+  THEME_SELECTED: 'Theme selected',
+  SHIELD_TOGGLE: 'Shield Toggle',
 };
 
 export const GHO_SUCCESS_MODAL = {
@@ -111,3 +180,9 @@ export const GHO_SUCCESS_MODAL = {
   GHO_BORROW_VIEW_TX_DETAILS: 'Click view TX details on GHO borrow',
   GHO_FAIL_COPY_IMAGE: 'Failed to copy image to clipboard',
 };
+export const SWITCH_MODAL = {
+  SWITCH_TYPE: 'Change switch type',
+};
+export const SUPPORT = {
+  TICKET_CREATED: 'Support Ticket Created',
+} as const;

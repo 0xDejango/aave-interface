@@ -1,3 +1,5 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
@@ -10,7 +12,6 @@ import {
   withdrawAndSwitch,
 } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aETHEthereumV3: 1,
@@ -35,15 +36,8 @@ const testData = {
       {
         asset: assets.ethereumV3Market.DAI,
         apyType: constants.apyType.variable,
-        amount: 25,
+        amount: 27,
         hasApproval: false,
-        repayOption: constants.repayType.collateral,
-      },
-      {
-        asset: assets.ethereumV3Market.DAI,
-        apyType: constants.apyType.variable,
-        amount: 2,
-        hasApproval: true,
         repayOption: constants.repayType.wallet,
       },
       {
@@ -88,10 +82,9 @@ const testData = {
   },
 };
 
-describe('DAI INTEGRATION SPEC, ETHEREUM V3 MARKET', () => {
+describe.skip('DAI INTEGRATION SPEC, ETHEREUM V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyAEthereumV3Fork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

@@ -94,7 +94,7 @@ Cypress.Commands.add(
         }
       })
       .click({ force: true });
-    cy.get("[data-cy=Modal] h2:contains('All done')").should('be.visible');
+    cy.get('[data-cy=Modal] [data-cy=txSuccess]').should('be.visible');
   }
 );
 
@@ -152,12 +152,7 @@ Cypress.Commands.add('refresh', () => {
 
 Cypress.Commands.add('doSwitchMarket', (marketName: string, isV3: boolean) => {
   cy.get('[data-cy="marketSelector"]').click();
-  cy.get(`[data-cy="markets_switch_button_${isV3 ? 'v3' : 'v2'}"]`).then(($btn) => {
-    if (!$btn.attr('aria-passed')) {
-      $btn.click();
-    }
-  });
-  cy.get(`[data-value="fork_proto_${isV3 ? marketName + '_v3' : marketName}"]`).click();
+  cy.get(`[data-cy="marketSelector_fork_proto_${isV3 ? marketName + '_v3' : marketName}"]`).click();
 });
 
 export {};

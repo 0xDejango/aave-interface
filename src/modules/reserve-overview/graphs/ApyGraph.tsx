@@ -1,3 +1,4 @@
+import { TimeWindow } from '@aave/react';
 import { Box, Stack, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { Annotation, HtmlLabel } from '@visx/annotation';
 import { AxisBottom, AxisLeft } from '@visx/axis';
@@ -12,9 +13,11 @@ import { WithTooltipProvidedProps } from '@visx/tooltip/lib/enhancers/withToolti
 import { bisector, extent, max } from 'd3-array';
 import { timeFormat } from 'd3-time-format';
 import React, { Fragment, ReactNode, useCallback, useMemo } from 'react';
-import { FormattedReserveHistoryItem, ReserveRateTimeRange } from 'src/hooks/useReservesHistory';
 
-type TooltipData = FormattedReserveHistoryItem;
+export type FormattedReserveHistoryItem = {
+  date: number;
+  value: number;
+};
 
 /**
  * Formats the given date for the specified time range to display in the tooltip.
@@ -29,8 +32,8 @@ type TooltipData = FormattedReserveHistoryItem;
  * @param {ReserveRateTimeRange} timeRange - The time range of the graph
  *
  */
-const formatDate = (d: Date, timeRange: ReserveRateTimeRange) => {
-  if (timeRange === '1m') {
+const formatDate = (d: Date, timeRange: TimeWindow) => {
+  if (timeRange === TimeWindow.LastMonth) {
     const formatted = timeFormat('%b %d, %H:%M UTC%Z');
     const date = formatted(d);
     const offsetSign = date.toString().split('UTC')[1].split('')[0];
@@ -49,21 +52,19 @@ const formatDate = (d: Date, timeRange: ReserveRateTimeRange) => {
 // accessors
 const getDate = (d: FormattedReserveHistoryItem) => new Date(d.date);
 const bisectDate = bisector<FormattedReserveHistoryItem, Date>((d) => new Date(d.date)).left;
-const getData = (d: FormattedReserveHistoryItem, fieldName: Field) => d[fieldName] * 100;
-
-type Field = 'liquidityRate' | 'variableBorrowRate';
+const getData = (d: FormattedReserveHistoryItem, fieldName: 'value') =>
+  d[fieldName as keyof FormattedReserveHistoryItem] * 100;
 
 export type AreaProps = {
   width: number;
   height: number;
   margin?: { top: number; right: number; bottom: number; left: number };
   data: FormattedReserveHistoryItem[];
-  fields: { name: Field; color: string; text: string }[];
-  selectedTimeRange: ReserveRateTimeRange;
-  avgFieldName?: Field;
+  field: { name: 'value'; color: string; text: string };
+  selectedTimeRange: TimeWindow;
 };
 
-export const ApyGraph = withTooltip<AreaProps, TooltipData>(
+export const ApyGraph = withTooltip<AreaProps, FormattedReserveHistoryItem>(
   ({
     width,
     height,
@@ -73,10 +74,9 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
     tooltipData,
     tooltipLeft = 0,
     data,
-    fields,
+    field,
     selectedTimeRange,
-    avgFieldName,
-  }: AreaProps & WithTooltipProvidedProps<TooltipData>) => {
+  }: AreaProps & WithTooltipProvidedProps<FormattedReserveHistoryItem>) => {
     if (width < 10) return null;
     const theme = useTheme();
     const isXsm = useMediaQuery(theme.breakpoints.down('xsm'));
@@ -102,7 +102,7 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
     const innerHeight = height - margin.top - margin.bottom;
 
     // scales
-    const xAxisNumTicks = selectedTimeRange !== '6m' || isXsm ? 3 : 4;
+    const xAxisNumTicks = selectedTimeRange !== TimeWindow.LastSixMonths || isXsm ? 3 : 4;
     const dateScale = useMemo(
       () =>
         scaleTime({
@@ -112,15 +112,13 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
       [innerWidth, data]
     );
     const yValueScale = useMemo(() => {
-      const valueMax = Math.max(
-        ...fields.map((field) => max(data, (d) => getData(d, field.name)) as number)
-      );
+      const valueMax = Math.max(max(data, (d) => getData(d, 'value')) as number);
       return scaleLinear({
         range: [innerHeight, 0],
         domain: [0, (valueMax || 0) * 1.1],
         nice: true,
       });
-    }, [innerHeight, data, fields]);
+    }, [innerHeight, data]);
 
     // tooltip handler
     const handleTooltip = useCallback(
@@ -144,54 +142,53 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
     );
 
     let avgLine: ReactNode = null;
-    if (avgFieldName) {
-      const avg = data.reduce((acc, cur) => acc + cur[avgFieldName], 0) / data.length;
-      if (avg > 0) {
-        const avgFormatted = (avg * 100).toFixed(2);
-        const avgArray = data.map((d) => {
-          return {
-            ...d,
-            [avgFieldName]: avg,
-          };
-        });
+    let avgLabel: ReactNode = null;
+    const avg = data.reduce((acc, cur) => acc + cur['value'], 0) / data.length;
+    if (avg > 0) {
+      const avgFormatted = (avg * 100).toFixed(2);
+      const avgArray = data.map((d) => {
+        return {
+          ...d,
+          ['value']: avg,
+        };
+      });
 
-        const annotationX = (dateScale(getDate(avgArray[0])) ?? 0) + 70;
-        const annotationY = (yValueScale(getData(avgArray[0], avgFieldName)) ?? 0) - 8;
+      const annotationX = (dateScale(getDate(avgArray[0])) ?? 0) + 78;
+      const annotationY = (yValueScale(max(data, (d) => getData(d, 'value')) ?? 0) ?? 0) + 3;
 
-        avgLine = (
-          <>
-            <LinePath
-              key="avg"
-              data={avgArray}
-              strokeDasharray="3,5"
-              stroke="#D2D4DC"
-              strokeWidth={2}
-              x={(d) => dateScale(getDate(d)) ?? 0}
-              y={(d) => yValueScale(getData(d, avgFieldName)) ?? 0}
-            />
-            <Annotation x={annotationX} y={annotationY}>
-              <HtmlLabel showAnchorLine={false}>
-                <Stack
-                  alignItems="center"
-                  direction="row"
-                  justifyContent="center"
-                  sx={{
-                    mx: 2,
-                    my: 0.5,
-                    fontSize: 12,
-                    background: theme.palette.divider,
-                    borderRadius: '99px',
-                  }}
-                >
-                  <Typography sx={{ m: 1 }} noWrap variant="secondary12">
-                    Avg {avgFormatted}%
-                  </Typography>
-                </Stack>
-              </HtmlLabel>
-            </Annotation>
-          </>
-        );
-      }
+      avgLine = (
+        <LinePath
+          key="avg"
+          data={avgArray}
+          strokeDasharray="3,5"
+          stroke="#D2D4DC"
+          strokeWidth={2}
+          x={(d) => dateScale(getDate(d)) ?? 0}
+          y={(d) => yValueScale(getData(d, 'value')) ?? 0}
+        />
+      );
+      avgLabel = (
+        <Annotation x={annotationX} y={annotationY}>
+          <HtmlLabel showAnchorLine={false}>
+            <Stack
+              alignItems="center"
+              direction="row"
+              justifyContent="center"
+              sx={{
+                mx: 2,
+                my: 0.5,
+                fontSize: 12,
+                background: theme.palette.divider,
+                borderRadius: '99px',
+              }}
+            >
+              <Typography sx={{ m: 1 }} noWrap variant="subheader2">
+                Avg {avgFormatted}%
+              </Typography>
+            </Stack>
+          </HtmlLabel>
+        </Annotation>
+      );
     }
 
     return (
@@ -208,20 +205,20 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
               numTicks={3}
             />
 
-            {/* Data Value Lines */}
-            {fields.map((field) => (
-              <LinePath
-                key={field.name}
-                stroke={field.color}
-                strokeWidth={2}
-                data={data}
-                x={(d) => dateScale(getDate(d)) ?? 0}
-                y={(d) => yValueScale(getData(d, field.name)) ?? 0}
-                curve={curveMonotoneX}
-              />
-            ))}
-
             {avgLine}
+
+            {/* Data Value Lines */}
+            <LinePath
+              key={field.name}
+              stroke={field.color}
+              strokeWidth={2}
+              data={data}
+              x={(d) => dateScale(getDate(d)) ?? 0}
+              y={(d) => yValueScale(getData(d, field.name)) ?? 0}
+              curve={curveMonotoneX}
+            />
+
+            {avgLabel}
 
             {/* X Axis */}
             <AxisBottom
@@ -274,30 +271,28 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
                   pointerEvents="none"
                   strokeDasharray="5,2"
                 />
-                {fields.map((field) => {
-                  return (
-                    <Fragment key={field.name}>
-                      <circle
-                        cx={tooltipLeft}
-                        cy={yValueScale(getData(tooltipData, field.name)) + 1}
-                        r={4}
-                        fillOpacity={0.1}
-                        strokeOpacity={0.1}
-                        strokeWidth={2}
-                        pointerEvents="none"
-                      />
-                      <circle
-                        cx={tooltipLeft}
-                        cy={yValueScale(getData(tooltipData, field.name))}
-                        r={4}
-                        fill={accentColorDark}
-                        stroke="white"
-                        strokeWidth={2}
-                        pointerEvents="none"
-                      />
-                    </Fragment>
-                  );
-                })}
+                return (
+                <Fragment key={field.name}>
+                  <circle
+                    cx={tooltipLeft}
+                    cy={yValueScale(getData(tooltipData, field.name)) + 1}
+                    r={4}
+                    fillOpacity={0.1}
+                    strokeOpacity={0.1}
+                    strokeWidth={2}
+                    pointerEvents="none"
+                  />
+                  <circle
+                    cx={tooltipLeft}
+                    cy={yValueScale(getData(tooltipData, field.name))}
+                    r={4}
+                    fill={accentColorDark}
+                    stroke="white"
+                    strokeWidth={2}
+                    pointerEvents="none"
+                  />
+                </Fragment>
+                );
               </g>
             )}
           </Group>
@@ -311,28 +306,22 @@ export const ApyGraph = withTooltip<AreaProps, TooltipData>(
               left={tooltipLeft + 40}
               style={theme.palette.mode === 'light' ? tooltipStyles : tooltipStylesDark}
             >
-              <Typography
-                variant="secondary12"
-                color="text.secondary"
-                sx={{ mb: 2, mr: 2, fontWeight: 400 }}
-              >
+              <Typography variant="subheader2" color="fg-2" sx={{ mb: 2, mr: 2, fontWeight: 400 }}>
                 {formatDate(getDate(tooltipData), selectedTimeRange)}
               </Typography>
-              {fields.map((field) => (
-                <Box
-                  key={field.name}
-                  display="flex"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
-                  <Typography variant="caption" color="text.secondary" sx={{ mr: 2 }}>
-                    {field.text}
-                  </Typography>
-                  <Typography variant="main12" color="text.primary">
-                    {getData(tooltipData, field.name).toFixed(2)}%
-                  </Typography>
-                </Box>
-              ))}
+              <Box
+                key={field.name}
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+              >
+                <Typography variant="caption" color="fg-2" sx={{ mr: 2 }}>
+                  {field.text}
+                </Typography>
+                <Typography variant="main12" color="fg-1">
+                  {getData(tooltipData, field.name).toFixed(2)}%
+                </Typography>
+              </Box>
             </TooltipWithBounds>
           </div>
         )}
@@ -392,7 +381,7 @@ export const PlaceholderChart = ({
 
         <Annotation x={width / 2} y={height / 2}>
           <HtmlLabel showAnchorLine={false}>
-            <Typography noWrap variant="subheader1" color="text.muted">
+            <Typography noWrap variant="subheader1" color="fg-3">
               No data available
             </Typography>
           </HtmlLabel>

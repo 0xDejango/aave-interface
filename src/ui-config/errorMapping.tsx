@@ -15,14 +15,29 @@ export type TxErrorType = {
   txAction: TxAction;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const isTxErrorType = (error: any): error is TxErrorType => {
+  return (
+    'blocking' in error &&
+    'actionBlocked' in error &&
+    'rawError' in error &&
+    'error' in error &&
+    'txAction' in error
+  );
+};
+
 export const getErrorTextFromError = (
-  error: Error,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  error: any,
   txAction: TxAction,
   blocking = true
 ): TxErrorType => {
   let errorNumber = 1;
 
-  if (error.message.startsWith('user rejected transaction')) {
+  const errorMessage: string =
+    (error instanceof Error ? error.message : error?.message ?? String(error ?? '')) || '';
+
+  if (errorMessage.toLowerCase().startsWith('user rejected')) {
     return {
       error: errorMapping[4001],
       blocking: false,

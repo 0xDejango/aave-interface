@@ -1,21 +1,22 @@
-import { ExternalLinkIcon } from '@heroicons/react/solid';
+import { AaveV2Ethereum } from '@aave-dao/aave-address-book';
 import { Trans } from '@lingui/macro';
-import { Box, Button, Divider, SvgIcon } from '@mui/material';
+import { Alert, Box, Button, Divider } from '@mui/material';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { getFrozenProposalLink } from 'src/components/infoTooltips/FrozenTooltip';
 import { PausedTooltipText } from 'src/components/infoTooltips/PausedTooltip';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
 import { Link } from 'src/components/primitives/Link';
-import { Warning } from 'src/components/primitives/Warning';
 import { AMPLWarning } from 'src/components/Warnings/AMPLWarning';
+import { BorrowableOnlyInEModeWarning } from 'src/components/Warnings/BorrowableOnlyInEModeWarning';
 import { BorrowDisabledWarning } from 'src/components/Warnings/BorrowDisabledWarning';
 import {
   AssetsBeingOffboarded,
   OffboardingWarning,
 } from 'src/components/Warnings/OffboardingWarning';
-import { ComputedReserveData } from 'src/hooks/app-data-provider/useAppDataProvider';
-import { useAssetCaps } from 'src/hooks/useAssetCaps';
-import { BROKEN_ASSETS } from 'src/hooks/useReservesHistory';
+import { ReserveWithId } from 'src/hooks/app-data-provider/useAppDataProvider';
+import { useAssetCapsSDK } from 'src/hooks/useAssetCapsSDK';
 import { useRootStore } from 'src/store/root';
+import { getBorrowableOnlyInEModeLabels } from 'src/utils/borrowableOnlyInEMode';
 import { GENERAL } from 'src/utils/events';
 import { useShallow } from 'zustand/shallow';
 
@@ -25,8 +26,20 @@ import { ReserveEModePanel } from './ReserveEModePanel';
 import { PanelItem, PanelRow, PanelTitle } from './ReservePanels';
 import { SupplyInfo } from './SupplyInfo';
 
+/**
+ * Broken Assets:
+ * A list of assets that currently are broken in some way, i.e. has bad data from either the subgraph or backend server
+ * Each item represents the ID of the asset, not the underlying address it's deployed to, appended with LendingPoolAddressProvider
+ * contract address it is held in. So each item in the array is essentially [underlyingAssetId + LendingPoolAddressProvider address].
+ */
+const BROKEN_ASSETS = [
+  // ampl https://governance.aave.com/t/arc-fix-ui-bugs-in-reserve-overview-for-ampl/5885/5?u=sakulstra
+  AaveV2Ethereum.ASSETS.AMPL.UNDERLYING.toLowerCase(),
+  AaveV2Ethereum.ASSETS.FEI.UNDERLYING.toLowerCase(),
+];
+
 type ReserveConfigurationProps = {
-  reserve: ComputedReserveData;
+  reserve: ReserveWithId;
 };
 
 export const ReserveConfiguration: React.FC<ReserveConfigurationProps> = ({ reserve }) => {
@@ -38,48 +51,49 @@ export const ReserveConfiguration: React.FC<ReserveConfigurationProps> = ({ rese
       store.currentMarket,
     ])
   );
-  const reserveId =
-    reserve.underlyingAsset + currentMarketData.addresses.LENDING_POOL_ADDRESS_PROVIDER;
-  const renderCharts =
-    !!currentNetworkConfig.ratesHistoryApiUrl &&
-    !currentMarketData.disableCharts &&
-    !BROKEN_ASSETS.includes(reserveId);
-  const { supplyCap, borrowCap, debtCeiling } = useAssetCaps();
-  const showSupplyCapStatus: boolean = reserve.supplyCap !== '0';
-  const showBorrowCapStatus: boolean = reserve.borrowCap !== '0';
+  const renderCharts = !BROKEN_ASSETS.includes(reserve.underlyingToken.address);
+  const { supplyCap, borrowCap, debtCeiling } = useAssetCapsSDK();
+  const showSupplyCapStatus: boolean = reserve.supplyInfo.supplyCap.amount.value !== '0';
+  const showBorrowCapStatus: boolean = reserve.borrowInfo?.borrowCap.amount.value !== '0';
 
-  const offboardingDiscussion = AssetsBeingOffboarded[currentMarket]?.[reserve.symbol];
+  const borrowableOnlyInEModeLabels = getBorrowableOnlyInEModeLabels(reserve);
+
+  const offboardingDiscussion =
+    AssetsBeingOffboarded[currentMarket]?.[reserve.underlyingToken.symbol];
 
   return (
     <>
       <Box>
         {reserve.isFrozen && !offboardingDiscussion ? (
-          <Warning sx={{ mt: '16px', mb: '40px' }} severity="error">
+          <Alert sx={{ width: '100%', mt: '16px', mb: '40px' }} severity="error">
             <Trans>
               This asset is frozen due to an Aave community decision.{' '}
               <Link
-                href={getFrozenProposalLink(reserve.symbol, currentMarket)}
+                href={getFrozenProposalLink(
+                  reserve.underlyingToken.symbol.toLocaleLowerCase(),
+                  currentMarket
+                )}
                 sx={{ textDecoration: 'underline' }}
               >
                 <Trans>More details</Trans>
               </Link>
             </Trans>
-          </Warning>
+          </Alert>
         ) : offboardingDiscussion ? (
-          <Warning sx={{ mt: '16px', mb: '40px' }} severity="error">
+          <Alert sx={{ width: '100%', mt: '16px', mb: '40px' }} severity="error">
             <OffboardingWarning discussionLink={offboardingDiscussion} />
-          </Warning>
+          </Alert>
         ) : (
-          reserve.symbol == 'AMPL' && (
-            <Warning sx={{ mt: '16px', mb: '40px' }} severity="warning">
+          reserve.underlyingToken.symbol == 'AMPL' && (
+            <Alert sx={{ width: '100%', mt: '16px', mb: '40px' }} severity="warning">
               <AMPLWarning />
-            </Warning>
+            </Alert>
           )
         )}
 
         {reserve.isPaused ? (
-          reserve.symbol === 'MAI' ? (
-            <Warning sx={{ mt: '16px', mb: '40px' }} severity="error">
+          reserve.underlyingToken.symbol === 'MAI' ? (
+            <Alert sx={{ width: '100%', mt: '16px', mb: '40px' }} severity="error">
               <Trans>
                 MAI has been paused due to a community decision. Supply, borrows and repays are
                 impacted.{' '}
@@ -92,11 +106,11 @@ export const ReserveConfiguration: React.FC<ReserveConfigurationProps> = ({ rese
                   <Trans>More details</Trans>
                 </Link>
               </Trans>
-            </Warning>
+            </Alert>
           ) : (
-            <Warning sx={{ mt: '16px', mb: '40px' }} severity="error">
+            <Alert sx={{ width: '100%', mt: '16px', mb: '40px' }} severity="error">
               <PausedTooltipText />
-            </Warning>
+            </Alert>
           )
         ) : null}
       </Box>
@@ -113,16 +127,27 @@ export const ReserveConfiguration: React.FC<ReserveConfigurationProps> = ({ rese
         />
       </PanelRow>
 
-      {(reserve.borrowingEnabled || Number(reserve.totalDebt) > 0) && (
+      {(reserve.borrowInfo?.borrowingState === 'ENABLED' ||
+        Number(reserve.borrowInfo?.total.amount.value) > 0 ||
+        reserve.eModeInfo?.some((eMode) => eMode.canBeBorrowed)) && (
         <>
           <Divider sx={{ my: { xs: 6, sm: 10 } }} />
           <PanelRow>
             <PanelTitle>Borrow info</PanelTitle>
             <Box sx={{ flexGrow: 1, minWidth: 0, maxWidth: '100%', width: '100%' }}>
-              {!reserve.borrowingEnabled && (
-                <Warning sx={{ mb: '40px' }} severity="error">
-                  <BorrowDisabledWarning symbol={reserve.symbol} currentMarket={currentMarket} />
-                </Warning>
+              {reserve.borrowInfo?.borrowingState !== 'ENABLED' &&
+                !reserve.eModeInfo?.some((eMode) => eMode.canBeBorrowed) && (
+                  <Alert sx={{ width: '100%', mb: '40px' }} severity="error">
+                    <BorrowDisabledWarning
+                      symbol={reserve.underlyingToken.symbol}
+                      currentMarket={currentMarket}
+                    />
+                  </Alert>
+                )}
+              {borrowableOnlyInEModeLabels.length > 0 && (
+                <Alert sx={{ width: '100%', mb: '40px' }} severity="info">
+                  <BorrowableOnlyInEModeWarning />
+                </Alert>
               )}
               <BorrowInfo
                 reserve={reserve}
@@ -137,14 +162,16 @@ export const ReserveConfiguration: React.FC<ReserveConfigurationProps> = ({ rese
         </>
       )}
 
-      {reserve.eModes.length > 0 && (
+      {reserve.eModeInfo?.length > 0 && (
         <>
           <Divider sx={{ my: { xs: 6, sm: 10 } }} />
           <ReserveEModePanel reserve={reserve} />
         </>
       )}
 
-      {(reserve.borrowingEnabled || Number(reserve.totalDebt) > 0) && (
+      {(reserve.borrowInfo?.borrowingState === 'ENABLED' ||
+        Number(reserve.borrowInfo?.total.amount.value) > 0 ||
+        reserve.eModeInfo?.some((eMode) => eMode.canBeBorrowed)) && (
         <>
           <Divider sx={{ my: { xs: 6, sm: 10 } }} />
 
@@ -161,31 +188,27 @@ export const ReserveConfiguration: React.FC<ReserveConfigurationProps> = ({ rese
               >
                 <PanelItem title={<Trans>Utilization Rate</Trans>} className="borderless">
                   <FormattedNumber
-                    value={reserve.borrowUsageRatio}
+                    value={reserve.borrowInfo!.utilizationRate.value}
                     percent
-                    variant="main16"
+                    variant="h4"
                     compact
                   />
                 </PanelItem>
                 <Button
                   onClick={() => {
                     trackEvent(GENERAL.EXTERNAL_LINK, {
-                      asset: reserve.underlyingAsset,
+                      asset: reserve.underlyingToken.address,
                       Link: 'Interest Rate Strategy',
-                      assetName: reserve.name,
+                      assetName: reserve.underlyingToken.name,
                     });
                   }}
                   href={currentNetworkConfig.explorerLinkBuilder({
                     address: reserve.interestRateStrategyAddress,
                   })}
-                  endIcon={
-                    <SvgIcon sx={{ width: 14, height: 14 }}>
-                      <ExternalLinkIcon />
-                    </SvgIcon>
-                  }
+                  endIcon={<ArrowUpRightIcon sx={{ width: 14, height: 14 }} />}
                   component={Link}
                   size="small"
-                  variant="outlined"
+                  variant="tertiary"
                   sx={{ verticalAlign: 'top' }}
                 >
                   <Trans>Interest rate strategy</Trans>

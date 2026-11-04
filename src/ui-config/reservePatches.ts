@@ -1,10 +1,12 @@
 import {
   AaveV3Arbitrum,
+  AaveV3Ethereum,
+  AaveV3EthereumHorizon,
   AaveV3Gnosis,
   AaveV3Optimism,
+  AaveV3Plasma,
   AaveV3Polygon,
-  AaveV3Sonic,
-} from '@bgd-labs/aave-address-book';
+} from '@aave-dao/aave-address-book';
 import { unPrefixSymbol } from 'src/hooks/app-data-provider/useAppDataProvider';
 
 /**
@@ -84,6 +86,7 @@ export const SYMBOL_NAME_MAP: { [key: string]: string } = {
   ZRX: '0x Coin',
   '1INCH': '1inch Network',
   LUSD: 'LUSD Stablecoin',
+  FBTC: 'FunctionBTC',
 };
 
 export interface IconSymbolInterface {
@@ -135,26 +138,170 @@ export function fetchIconSymbolAndName({ underlyingAsset, symbol, name }: IconSy
       symbol: 'sDAI',
       iconSymbol: 'gnosissdai',
     },
-    [AaveV3Sonic.ASSETS.USDCe.UNDERLYING.toLowerCase()]: {
-      name: 'USDC',
-      symbol: 'USDC',
-      iconSymbol: 'USDC',
-    },
     '0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c': {
       name: 'BTCB Token',
       symbol: 'BTCB',
       iconSymbol: 'btc',
     },
-    '0x50d2c7992b802eef16c04feadab310f31866a545': {
+    [AaveV3Ethereum.ASSETS.PT_eUSDE_29MAY2025.UNDERLYING.toLowerCase()]: {
       symbol: 'PT eUSDe May',
       name: 'PT eUSDe May',
       iconSymbol: 'pteusde',
     },
-    '0x3b3fb9c57858ef816833dc91565efcd85d96f634': {
+    [AaveV3Ethereum.ASSETS.PT_sUSDE_31JUL2025.UNDERLYING.toLowerCase()]: {
       symbol: 'PT sUSDe July',
       name: 'PT sUSDe July',
       iconSymbol: 'ptsusde',
     },
+    [AaveV3Ethereum.ASSETS.PT_sUSDE_25SEP2025.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT sUSDe September',
+      name: 'PT sUSDe September',
+      iconSymbol: 'ptsusde',
+    },
+    [AaveV3Ethereum.ASSETS.PT_sUSDE_27NOV2025.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT sUSDe November 27th 2025',
+      name: 'PT sUSDe November 2025',
+      iconSymbol: 'ptsusde',
+    },
+    '0x917459337caac939d41d7493b3999f571d20d667': {
+      symbol: 'PT USDe July',
+      name: 'PT USDe July',
+      iconSymbol: 'ptusde',
+    },
+    '0x14bdc3a3ae09f5518b923b69489cbcafb238e617': {
+      symbol: 'PT eUSDe August',
+      name: 'PT eUSDe August',
+      iconSymbol: 'pteusde',
+    },
+    '0xbc6736d346a5ebc0debc997397912cd9b8fae10a': {
+      symbol: 'PT USDe September 25th 2025',
+      name: 'PT USDe September 2025',
+      iconSymbol: 'ptusde',
+    },
+    [AaveV3Ethereum.ASSETS.PT_USDe_27NOV2025.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT USDe November 27th 2025',
+      name: 'PT USDe November 2025',
+      iconSymbol: 'ptusde',
+    },
+
+    [AaveV3Plasma.ASSETS.WXPL.UNDERLYING.toLowerCase()]: {
+      symbol: 'WXPL',
+      name: 'Wrapped XPL',
+      iconSymbol: 'wxpl',
+    },
+
+    [AaveV3Plasma.ASSETS.PT_USDe_15JAN2026.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT USDe January 15th 2026',
+      name: 'PT USDe January 2026',
+      iconSymbol: 'ptusde',
+    },
+    [AaveV3Plasma.ASSETS.PT_sUSDE_15JAN2026.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT sUSDe January 15th 2026',
+      name: 'PT sUSDe January 2026',
+      iconSymbol: 'ptsusde',
+    },
+    [AaveV3Plasma.ASSETS.PT_USDe_9APR2026.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT USDe April 9th 2026',
+      name: 'PT USDe April 2026',
+      iconSymbol: 'ptusde',
+    },
+    [AaveV3Plasma.ASSETS.PT_sUSDE_9APR2026.UNDERLYING.toLowerCase()]: {
+      symbol: 'PT sUSDe April 9th 2026',
+      name: 'PT sUSDe April 2026',
+      iconSymbol: 'ptsusde',
+    },
+
+    [AaveV3Plasma.ASSETS.syrupUSDT.UNDERLYING.toLowerCase()]: {
+      symbol: 'syrupUSDT',
+      name: 'syrupUSDT',
+      iconSymbol: 'syrupusdt',
+    },
+    '0x1f84a51296691320478c98b8d77f2bbd17d34350': {
+      symbol: 'PT USDe February 5th 2026',
+      name: 'PT USDe February 2026',
+      iconSymbol: 'ptusde',
+    },
+    '0xe8483517077afa11a9b07f849cee2552f040d7b2': {
+      symbol: 'PT sUSDe February 5th 2026',
+      name: 'PT sUSDe February 2026',
+      iconSymbol: 'ptsusde',
+    },
+    '0xaebf0bb9f57e89260d57f31af34eb58657d96ce0': {
+      symbol: 'PT USDe May 7th 2026',
+      name: 'PT USDe May 2026',
+      iconSymbol: 'ptusde',
+    },
+    '0x3de0ff76e8b528c092d47b9dac775931cef80f49': {
+      symbol: 'PT sUSDe May 7th 2026',
+      name: 'PT sUSDe May 2026',
+      iconSymbol: 'ptsusde',
+    },
+    '0x9bf45ab47747f4b4dd09b3c2c73953484b4eb375': {
+      symbol: 'PT srUSDe 2nd 2026',
+      name: 'PT Strata Senior USDe 2nd 2026',
+      iconSymbol: 'srusde',
+    },
+    '0xfafddbb3fc7688494971a79cc65dca3ef82079e7': {
+      symbol: 'USDm',
+      name: 'MegaUSD',
+      iconSymbol: 'megausd',
+    },
+    '0x23b17d3944742ace3d0c71586fcb320d1e4a1ed2': {
+      symbol: 'PT USDe June 18th 2026',
+      name: 'PT USDe June 2026',
+      iconSymbol: 'ptusde',
+    },
+    '0x30559e3d35e33ab69399a3fe9f383d32bd3c016e': {
+      symbol: 'PT sUSDe June 18th 2026',
+      name: 'PT sUSDe June 2026',
+      iconSymbol: 'ptsusde',
+    },
+    '0x619d75e3b790ebc21c289f2805bb7177a7d732e2': {
+      symbol: 'PT Strata Senior USDe June 25th 2026',
+      name: 'PT Strata Senior USDe June 2026',
+      iconSymbol: 'ptsrusde',
+    },
+    '0x9db38d74a0d29380899ad354121dfb521adb0548': {
+      symbol: 'PT USDG 28MAY2026',
+      name: 'PT USDG May 2026',
+      iconSymbol: 'ptusdg',
+    },
+    '0x59bc9fae5d62b19d4f8d07d758047acb9ee19d34': {
+      symbol: 'PT Strata Senior USDe October 22nd 2026',
+      name: 'PT Strata Senior USDe October 2026',
+      iconSymbol: 'ptsrusde',
+    },
+    '0xf7fb83435f455bd970f2d9f943f4eece1941b3e9': {
+      symbol: 'PT sUSDe October 22nd 2026',
+      name: 'PT sUSDe October 2026',
+      iconSymbol: 'ptsusde',
+    },
+    '0x8b562578b2f9aa8c14ccda3c5d6cbcead3b06a57': {
+      symbol: 'PT AUSD December 17th 2026',
+      name: 'PT AUSD December 2026',
+      iconSymbol: 'ausd',
+    },
+    '0x9a09a9e491db3dd8ada5b1b889991ac9ad5fd362': {
+      symbol: 'PT USDG October 29th 2026',
+      name: 'PT USDG October 2026',
+      iconSymbol: 'ptusdg',
+    },
+    '0x5ea1f184af5ced57725213d8267b5c4c834557d4': {
+      symbol: 'PT USDG February 25th 2027',
+      name: 'PT USDG February 2027',
+      iconSymbol: 'ptusdg',
+    },
+    [AaveV3EthereumHorizon.ASSETS.USCC.UNDERLYING.toLowerCase()]: {
+      symbol: 'USCC',
+      name: 'Bitwise Crypto Carry Fund',
+      iconSymbol: 'uscc',
+    },
+    [AaveV3EthereumHorizon.ASSETS.USTB.UNDERLYING.toLowerCase()]: {
+      symbol: 'USTB',
+      name: 'Invesco Short Duration US Government Securities Fund',
+      iconSymbol: 'ustb',
+    },
+
     '0xa693B19d2931d498c5B318dF961919BB4aee87a5': { iconSymbol: 'UST', name: 'UST (Wormhole)' },
     '0x59a19d8c652fa0284f44113d0ff9aba70bd46fb4': { iconSymbol: 'BPT_BAL_WETH' },
     '0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5': { iconSymbol: 'BPT_WBTC_WETH' },
@@ -172,6 +319,11 @@ export function fetchIconSymbolAndName({ underlyingAsset, symbol, name }: IconSy
     '0x004375dff511095cc5a197a54140a24efef3a416': { iconSymbol: 'UNI_BTC_USDC' },
     '0xbb2b8038a1640196fbe3e38816f3e67cba72d940': { iconSymbol: 'UNI_WBTC_WETH' },
     '0x2fdbadf3c4d5a8666bc06645b8358ab803996e28': { iconSymbol: 'UNI_YFI_WETH' },
+    '0xc96de26018a54d51c097160568752c4e3bd6c364': {
+      iconSymbol: 'FBTC',
+      name: 'Function Bitcoin',
+      symbol: 'FBTC',
+    },
   };
 
   const lowerUnderlyingAsset = underlyingAsset.toLowerCase();

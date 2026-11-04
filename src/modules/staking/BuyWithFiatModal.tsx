@@ -1,7 +1,8 @@
-import { ExternalLinkIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
 import { Box, Button, SvgIcon, Typography } from '@mui/material';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { BasicModal } from 'src/components/primitives/BasicModal';
+import { TxModalTitle } from 'src/components/transactions/FlowCommons/TxModalTitle';
 import { useWeb3Context } from 'src/libs/hooks/useWeb3Context';
 import { useRootStore } from 'src/store/root';
 import { onRampServices } from 'src/ui-config/onRampServicesConfig';
@@ -23,9 +24,7 @@ export const BuyWithFiatModal = ({ cryptoSymbol, open, close }: BuyWithFiatModal
 
   return (
     <BasicModal open={open} setOpen={close}>
-      <Typography variant="h2">
-        <Trans>Buy Crypto with Fiat</Trans>
-      </Typography>
+      <TxModalTitle title={<Trans>Buy Crypto with Fiat</Trans>} sx={{ mb: 0 }} />
       <Typography sx={{ my: 6 }}>
         {onRampServices.length && onRampServices.length === 1 ? (
           <Trans>
@@ -41,13 +40,9 @@ export const BuyWithFiatModal = ({ cryptoSymbol, open, close }: BuyWithFiatModal
         {onRampServices.map(({ name, makeLink, icon }) => (
           <Button
             key={name}
-            variant="outlined"
+            variant="tertiary"
             size="large"
-            endIcon={
-              <SvgIcon>
-                <ExternalLinkIcon />
-              </SvgIcon>
-            }
+            endIcon={<ArrowUpRightIcon />}
             fullWidth
             sx={{ px: 4, '&:not(:first-of-type)': { mt: 4 } }}
             href={makeLink({ cryptoSymbol, network, walletAddress })}

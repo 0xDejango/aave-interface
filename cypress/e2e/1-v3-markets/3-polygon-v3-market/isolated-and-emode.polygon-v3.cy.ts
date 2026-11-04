@@ -1,3 +1,5 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../fixtures/assets.json';
 import constants from '../../../fixtures/constans.json';
 import { skipState } from '../../../support/steps/common';
@@ -10,7 +12,6 @@ import {
   switchCollateralBlockedInModal,
   verifyCountOfBorrowAssets,
 } from '../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aMATICPolygonV3: 20,
@@ -61,7 +62,6 @@ describe.skip('ISOLATED MODE with EMODE SPEC, POLYGON V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyPolygonFork({
     market: 'fork_proto_polygon_v3',
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   describe('Get isolated asset', () => {

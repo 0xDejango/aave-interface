@@ -22,8 +22,10 @@ interface TxActionsWrapperProps extends BoxProps {
   preparingTransactions: boolean;
   requiresAmount?: boolean;
   requiresApproval: boolean;
+  requiresApprovalReset?: boolean;
   symbol?: string;
   blocked?: boolean;
+  blockedText?: ReactNode;
   fetchingData?: boolean;
   errorParams?: {
     loading: boolean;
@@ -32,6 +34,9 @@ interface TxActionsWrapperProps extends BoxProps {
     handleClick: () => Promise<void>;
   };
   tryPermit?: boolean;
+  permitInUse?: boolean;
+  /** Extra approval controls for a specific flow, shown alongside the method toggle. */
+  approvalOptions?: ReactNode;
   event?: TrackEventProps;
 }
 
@@ -47,12 +52,16 @@ export const TxActionsWrapper = ({
   preparingTransactions,
   requiresAmount,
   requiresApproval,
+  requiresApprovalReset,
   sx,
   symbol,
   blocked,
+  blockedText,
   fetchingData = false,
   errorParams,
   tryPermit,
+  permitInUse = false,
+  approvalOptions,
   event,
   ...rest
 }: TxActionsWrapperProps) => {
@@ -63,7 +72,7 @@ export const TxActionsWrapper = ({
   const isAmountMissing = requiresAmount && requiresAmount && Number(amount) === 0;
 
   function getMainParams() {
-    if (blocked) return { disabled: true, content: actionText };
+    if (blocked) return { disabled: true, content: blockedText || actionText };
     if (
       (txError?.txAction === TxAction.GAS_ESTIMATION ||
         txError?.txAction === TxAction.MAIN_ACTION) &&
@@ -95,7 +104,15 @@ export const TxActionsWrapper = ({
     )
       return null;
     if (approvalTxState?.loading)
-      return { loading: true, disabled: true, content: <Trans>Approving {symbol}...</Trans> };
+      return {
+        loading: true,
+        disabled: true,
+        content: (
+          <Trans>
+            {requiresApprovalReset ? 'Resetting' : 'Approving'} {symbol}...
+          </Trans>
+        ),
+      };
     if (approvalTxState?.success)
       return {
         disabled: true,
@@ -116,7 +133,11 @@ export const TxActionsWrapper = ({
           iconSize={20}
           iconMargin={2}
           color="white"
-          text={<Trans>Approve {symbol} to continue</Trans>}
+          text={
+            <Trans>
+              {requiresApprovalReset ? 'Reset' : 'Approve'} {symbol} to continue
+            </Trans>
+          }
         />
       ),
       handleClick: handleApproval,
@@ -128,8 +149,23 @@ export const TxActionsWrapper = ({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', mt: 12, ...sx }} {...rest}>
       {approvalParams && !readOnlyModeAddress && (
-        <Box sx={{ display: 'flex', justifyContent: 'end', alignItems: 'center' }}>
-          <RightHelperText approvalHash={approvalTxState?.txHash} tryPermit={tryPermit} />
+        // Wraps rather than squeezes: an exact allowance can be a full-precision 18-decimal
+        // figure, which does not share a line with the approval method toggle.
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'end',
+            alignItems: 'center',
+            columnGap: 4,
+          }}
+        >
+          <RightHelperText
+            approvalHash={approvalTxState?.txHash}
+            tryPermit={tryPermit}
+            permitInUse={permitInUse}
+          />
+          {!approvalTxState?.txHash && approvalOptions}
         </Box>
       )}
 
@@ -161,7 +197,7 @@ export const TxActionsWrapper = ({
         {content}
       </Button>
       {readOnlyModeAddress && (
-        <Typography variant="helperText" color="warning.main" sx={{ textAlign: 'center', mt: 2 }}>
+        <Typography variant="helperText" color="fg-3" sx={{ textAlign: 'center', mt: 2 }}>
           <Trans>Read-only mode. Connect to a wallet to perform transactions.</Trans>
         </Typography>
       )}

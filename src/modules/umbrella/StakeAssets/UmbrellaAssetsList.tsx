@@ -1,0 +1,150 @@
+import { Trans } from '@lingui/macro';
+import { useMediaQuery, useTheme } from '@mui/material';
+import { useMemo, useState } from 'react';
+import { TABLE_CARDS_BELOW } from 'src/components/lists/listBreakpoints';
+import { ListColumn } from 'src/components/lists/ListColumn';
+import { ListHeaderTitle } from 'src/components/lists/ListHeaderTitle';
+import { ListHeaderWrapper } from 'src/components/lists/ListHeaderWrapper';
+import { MergedStakeData } from 'src/hooks/stake/useUmbrellaSummary';
+
+import { ApyTooltip } from '../helpers/ApyTooltip';
+import { SharesTooltip } from '../helpers/SharesTooltip';
+import { StakedUnderlyingTooltip } from '../helpers/StakedUnderlyingTooltip';
+import { UmbrellaAssetsListItemLoader } from './UmbrellaAssetsListItemLoader';
+import { UmbrellaAssetsListMobileItem } from './UmbrellaAssetsListMobileItem';
+import { UmbrellaAssetsListMobileItemLoader } from './UmbrellaAssetsListMobileItemLoader';
+import { UmbrellaStakeAssetsListItem } from './UmbrellaStakeAssetsListItem';
+
+const listHeaders = [
+  {
+    title: <Trans>Asset</Trans>,
+    sortKey: 'symbol',
+  },
+  {
+    title: <ApyTooltip variant="subheader2" />,
+    sortKey: 'totalAPY',
+  },
+  {
+    title: <StakedUnderlyingTooltip variant="subheader2" />,
+    sortKey: 'stakeTokenUnderlyingBalance',
+  },
+  {
+    title: <SharesTooltip variant="subheader2" />,
+    sortKey: 'stakeSharesTokens',
+  },
+  {
+    title: <Trans>Av. to Stake</Trans>,
+    sortKey: 'totalAvailableToStake',
+  },
+  {
+    title: <Trans>Av. to Claim</Trans>,
+    sortKey: 'totalAvailableToClaim',
+  },
+  {
+    title: <></>,
+  },
+];
+
+type UmbrelaAssetsListProps = {
+  loading: boolean;
+  stakedDataWithTokenBalances: MergedStakeData[];
+  isLoadingStakedDataWithTokenBalances: boolean;
+};
+
+export default function UmbrellaAssetsList({
+  loading,
+  stakedDataWithTokenBalances,
+  isLoadingStakedDataWithTokenBalances,
+}: UmbrelaAssetsListProps) {
+  const theme = useTheme();
+  const isTableChangedToCards = useMediaQuery(theme.breakpoints.down(TABLE_CARDS_BELOW));
+  const [sortName, setSortName] = useState('');
+  const [sortDesc, setSortDesc] = useState(false);
+
+  const sortedData = useMemo(() => {
+    if (!stakedDataWithTokenBalances) return [];
+
+    return [...stakedDataWithTokenBalances].sort((a, b) => {
+      if (sortName === 'symbol') {
+        return sortDesc ? b.symbol.localeCompare(a.symbol) : a.symbol.localeCompare(b.symbol);
+      }
+
+      if (sortName === 'totalAPY') {
+        const apyA = Number(a.totalRewardApy);
+        const apyB = Number(b.totalRewardApy);
+        return sortDesc ? apyB - apyA : apyA - apyB;
+      }
+
+      if (sortName === 'totalAvailableToClaim') {
+        const accruedA =
+          a.formattedRewards?.reduce((sum, reward) => sum + Number(reward.accrued || '0'), 0) || 0;
+        const accruedB =
+          b.formattedRewards?.reduce((sum, reward) => sum + Number(reward.accrued || '0'), 0) || 0;
+        return sortDesc ? accruedB - accruedA : accruedA - accruedB;
+      }
+
+      if (sortName === 'totalAvailableToStake') {
+        const balanceA = Number(a.formattedBalances.totalAvailableToStake);
+        const balanceB = Number(b.formattedBalances.totalAvailableToStake);
+        return sortDesc ? balanceB - balanceA : balanceA - balanceB;
+      }
+      //! Your Staked Amount: shows the underlying of assets(ej. USDC, WETH) staked or equivalent to the
+      //! shares.
+      //! Using stakeTokenReedemableAmount should be the equivalent in Asset to the shares
+      if (sortName === 'stakeTokenUnderlyingBalance') {
+        const balanceA = Number(a.formattedBalances?.stakeTokenRedeemableAmount || '0');
+        const balanceB = Number(b.formattedBalances?.stakeTokenRedeemableAmount || '0');
+        return sortDesc ? balanceB - balanceA : balanceA - balanceB;
+      }
+      //!trial: Shares shows the staked StkToken obtained from the staked asset amount
+      if (sortName === 'stakeSharesTokens') {
+        const balanceA = Number(a.formattedBalances?.stakeTokenBalance || '0');
+        const balanceB = Number(b.formattedBalances?.stakeTokenBalance || '0');
+        return sortDesc ? balanceB - balanceA : balanceA - balanceB;
+      }
+
+      return 0;
+    });
+  }, [stakedDataWithTokenBalances, sortName, sortDesc]);
+
+  const isLoading = loading || isLoadingStakedDataWithTokenBalances;
+  const Loader = isTableChangedToCards
+    ? UmbrellaAssetsListMobileItemLoader
+    : UmbrellaAssetsListItemLoader;
+  const Item = isTableChangedToCards ? UmbrellaAssetsListMobileItem : UmbrellaStakeAssetsListItem;
+
+  // Hide list when no results, via search term or if a market has no assets
+  if (!isLoading && sortedData.length === 0) return null;
+
+  return (
+    <>
+      {!isTableChangedToCards && (
+        <ListHeaderWrapper px={5}>
+          {listHeaders.map((col) => (
+            <ListColumn
+              isRow={col.sortKey === 'symbol'}
+              minWidth={col.sortKey === 'symbol' ? 275 : undefined}
+              key={col.sortKey}
+            >
+              <ListHeaderTitle
+                sortName={sortName}
+                sortDesc={sortDesc}
+                setSortName={setSortName}
+                setSortDesc={setSortDesc}
+                sortKey={col.sortKey}
+              >
+                {col.title}
+              </ListHeaderTitle>
+            </ListColumn>
+          ))}
+        </ListHeaderWrapper>
+      )}
+
+      {isLoading
+        ? Array.from({ length: isTableChangedToCards ? 3 : 4 }, (_, i) => <Loader key={i} />)
+        : sortedData.map((umbrellaStakeAsset, index) => (
+            <Item {...umbrellaStakeAsset} key={index} />
+          ))}
+    </>
+  );
+}

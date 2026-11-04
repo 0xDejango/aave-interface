@@ -1,0 +1,133 @@
+import { Trans } from '@lingui/macro';
+import { Button, SvgIcon, Theme } from '@mui/material';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import { clsx } from 'clsx';
+import { useRouter } from 'next/router';
+import React from 'react';
+import { ChevronDownIcon } from 'src/components/icons/ChevronDownIcon';
+import { useRootStore } from 'src/store/root';
+import { NAV_BAR } from 'src/utils/events';
+import { figVars } from 'src/utils/figmaColors';
+
+import { Link, ROUTES } from '../../components/primitives/Link';
+import { NAV_LINK_PADDING_X, NAV_LINK_PADDING_Y, navLinkSx } from './navLinkSx';
+
+const CHEVRON_GAP = '0.25rem';
+const CHEVRON_SIZE = '16px';
+
+// The options read as nav links rather than menu rows, so they take the nav bar's own type and
+// colour — buttonM, fg-3 until their route is current, fg-1 on hover — in place of the 400-weight
+// ListItemText default every other menu row uses. `component={Link}` already applies `.active` on
+// the current route, so the match is left to CSS as it is for the top-level links. The row
+// highlight stays with MuiMenuItem.
+const optionSx = (theme: Theme) => ({
+  minWidth: '140px',
+  ...theme.typography.buttonM,
+  color: figVars['fg-3'],
+  transition: 'color 0.25s ease-out',
+  '&.active, &:hover': {
+    color: figVars['fg-1'],
+  },
+});
+
+export function MoreMenu() {
+  const trackEvent = useRootStore((store) => store.trackEvent);
+  const router = useRouter();
+  // The trigger isn't a Link, so it never gets the route-aware `active` class on its own.
+  // Mark it active when the current route is one of the menu's destinations.
+  const isActive =
+    router.pathname === ROUTES.staking ||
+    router.pathname === ROUTES.safetyModule ||
+    router.pathname.startsWith(ROUTES.governance);
+
+  const [anchorEl, setAnchorEl] = React.useState<Element | null>(null);
+  const open = Boolean(anchorEl);
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    setAnchorEl(event.currentTarget);
+    trackEvent(NAV_BAR.MAIN_MENU, { nav_link: 'More' });
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleMenuItemClick = (title: string) => {
+    trackEvent(NAV_BAR.MAIN_MENU, { nav_link: title });
+    handleClose();
+  };
+
+  return (
+    <>
+      <Button
+        aria-label="more menu"
+        id="more-button"
+        data-cy="menuMore"
+        className={clsx({ active: isActive })}
+        aria-controls={open ? 'more-menu' : undefined}
+        aria-expanded={open ? 'true' : undefined}
+        aria-haspopup="true"
+        onClick={handleClick}
+        sx={[
+          navLinkSx(NAV_LINK_PADDING_Y, NAV_LINK_PADDING_X),
+          {
+            '&:after': { right: `calc(${NAV_LINK_PADDING_X} + ${CHEVRON_GAP} + ${CHEVRON_SIZE})` },
+          },
+        ]}
+      >
+        <Trans>More</Trans>
+        <SvgIcon
+          sx={{
+            ml: CHEVRON_GAP,
+            fontSize: CHEVRON_SIZE,
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease-in-out',
+          }}
+        >
+          <ChevronDownIcon />
+        </SvgIcon>
+      </Button>
+
+      <Menu
+        id="more-menu"
+        MenuListProps={{
+          'aria-labelledby': 'more-button',
+        }}
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        keepMounted={true}
+        sx={{
+          mt: '-1.125rem',
+        }}
+      >
+        <MenuItem
+          component={Link}
+          href={ROUTES.governance}
+          onClick={() => handleMenuItemClick('Governance')}
+          data-cy="menuGovernance"
+          sx={optionSx}
+        >
+          <Trans>Governance</Trans>
+        </MenuItem>
+        <MenuItem
+          component={Link}
+          href={ROUTES.staking}
+          onClick={() => handleMenuItemClick('Staking')}
+          sx={optionSx}
+        >
+          <Trans>Umbrella</Trans>
+        </MenuItem>
+        <MenuItem
+          component={Link}
+          href={ROUTES.safetyModule}
+          onClick={() => handleMenuItemClick('Safety Module')}
+          sx={optionSx}
+        >
+          <Trans>Safety Module</Trans>
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}

@@ -40,7 +40,13 @@ export class WalletBalanceService {
 
     const options: { blockTag?: string } = {};
     if (blockHash) {
-      options.blockTag = blockHash;
+      // Resolve block hash to block number — passing a raw 256-bit hash as blockTag
+      // causes "number too large" errors on most RPC providers including Alchemy.
+      const provider = this.getProvider(chainId);
+      const block = await provider.getBlock(blockHash);
+      if (block) {
+        options.blockTag = `0x${block.number.toString(16)}`;
+      }
     }
     const balances = await walletBalanceService.batchBalanceOf(
       [user],
@@ -79,7 +85,9 @@ export class WalletBalanceService {
   }
 
   async getGhoBridgeBalancesTokenBalances(
-    marketData: MarketDataType,
+    chainId: number,
+    ghoTokenAddress: string,
+    walletBalanceProviderAddress: string,
     user: string
   ): Promise<{
     bridgeTokenBalance: string;
@@ -87,19 +95,19 @@ export class WalletBalanceService {
     address: string;
   }> {
     const walletBalanceService = this.getWalletBalanceService(
-      marketData.chainId,
-      marketData.addresses.WALLET_BALANCE_PROVIDER
+      chainId,
+      walletBalanceProviderAddress
     );
 
     const balances = await walletBalanceService.batchBalanceOf(
       [user],
-      [marketData.addresses.GHO_TOKEN_ADDRESS?.toLowerCase() as string] // GHO UNDERLYING
+      [ghoTokenAddress?.toLowerCase() as string] // GHO UNDERLYING
     );
 
     return {
       bridgeTokenBalance: balances[0].toString(),
       bridgeTokenBalanceFormatted: formatUnits(balances[0].toString(), 18),
-      address: marketData.addresses.GHO_TOKEN_ADDRESS as string,
+      address: ghoTokenAddress,
     };
   }
 }

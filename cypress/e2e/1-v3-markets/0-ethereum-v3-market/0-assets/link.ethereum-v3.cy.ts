@@ -1,10 +1,11 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
 import { configEnvWithTenderlyAEthereumV3Fork } from '../../../../support/steps/configuration.steps';
 import { borrow, repay, supply, withdraw } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aETHEthereumV3: 1,
@@ -48,7 +49,7 @@ const testData = {
     ],
     withdraw: {
       asset: assets.ethereumV3Market.LINK,
-      isCollateral: true,
+      isCollateral: false,
       amount: 1,
       hasApproval: true,
     },
@@ -60,7 +61,7 @@ const testData = {
         assetName: assets.ethereumV3Market.LINK.shortName,
         amount: 7.0,
         collateralType: constants.collateralType.isCollateral,
-        isCollateral: true,
+        isCollateral: false,
       },
       {
         type: constants.dashboardTypes.borrow,
@@ -75,7 +76,6 @@ const testData = {
 describe('LINK INTEGRATION SPEC, ETHEREUM V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyAEthereumV3Fork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
 

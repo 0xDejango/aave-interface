@@ -153,7 +153,11 @@ export const GovDelegationModalContent: React.FC<GovDelegationModalContentProps>
     <>
       <TxModalTitle title={isRevokeModal ? 'Revoke power' : 'Set up delegation'} />
       {isWrongNetwork && !readOnlyModeAddress && (
-        <ChangeNetworkWarning networkName={networkConfig.name} chainId={govChain} />
+        <ChangeNetworkWarning
+          autoSwitchOnMount={true}
+          networkName={networkConfig.name}
+          chainId={govChain}
+        />
       )}
       {(isRevokeModal &&
         !!powers &&
@@ -162,7 +166,7 @@ export const GovDelegationModalContent: React.FC<GovDelegationModalContentProps>
           (powers.aavePropositionDelegatee === constants.AddressZero &&
             powers.stkAavePropositionDelegatee === constants.AddressZero))) || (
         <>
-          <Typography variant="description" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography variant="description" color="fg-2" sx={{ mb: 1 }}>
             <Trans>{isRevokeModal ? 'Power to revoke' : 'Power to delegate'}</Trans>
           </Typography>
           <DelegationTypeSelector
@@ -173,14 +177,14 @@ export const GovDelegationModalContent: React.FC<GovDelegationModalContentProps>
       )}
 
       {isRevokeModal ? (
-        <Typography variant="description" color="text.secondary" sx={{ mt: 6, mb: 2 }}>
+        <Typography variant="description" color="fg-2" sx={{ mt: 6, mb: 2 }}>
           <Trans>Balance to revoke</Trans>
         </Typography>
       ) : (
         <TextWithTooltip
           text="Balance to delegate"
           variant="description"
-          textColor="text.secondary"
+          textColor="fg-2"
           wrapperProps={{ mt: 6, mb: 2 }}
           event={{
             eventName: GENERAL.TOOL_TIP,
@@ -209,7 +213,7 @@ export const GovDelegationModalContent: React.FC<GovDelegationModalContentProps>
       />
       {!isRevokeModal && (
         <>
-          <Typography variant="description" color="text.secondary" mb={1}>
+          <Typography variant="description" color="fg-2" mb={1}>
             <Trans>Recipient address</Trans>
           </Typography>
           <FormControl

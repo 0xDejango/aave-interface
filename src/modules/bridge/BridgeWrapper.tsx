@@ -1,7 +1,8 @@
-import { ArrowNarrowRightIcon, ExternalLinkIcon } from '@heroicons/react/outline';
+import { ArrowNarrowRightIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
 import { Button, Paper, Stack, SvgIcon, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { ConnectWalletPaper } from 'src/components/ConnectWalletPaper';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { ListColumn } from 'src/components/lists/ListColumn';
 import { ListHeaderTitle } from 'src/components/lists/ListHeaderTitle';
 import { ListHeaderWrapper } from 'src/components/lists/ListHeaderWrapper';
@@ -54,7 +55,7 @@ export function BridgeWrapper() {
         <Typography variant={'h3'}>
           <Trans>You don&apos;t have any bridge transactions</Trans>
         </Typography>{' '}
-        <Button sx={{ mt: 4 }} onClick={openBridge} variant="gradient">
+        <Button sx={{ mt: 4 }} onClick={openBridge} variant="contained">
           <Typography typography="subheader1">Bridge GHO</Typography>
         </Button>
       </Paper>
@@ -78,9 +79,7 @@ export function BridgeWrapper() {
               <Typography variant="caption">
                 <Trans>View all</Trans>
               </Typography>
-              <SvgIcon sx={{ fontSize: '16px' }}>
-                <ExternalLinkIcon />
-              </SvgIcon>
+              <ArrowUpRightIcon sx={{ fontSize: '16px' }} />
             </Stack>
           </Link>
         </Stack>
@@ -88,13 +87,13 @@ export function BridgeWrapper() {
     >
       {!downToSm && (
         <ListHeaderWrapper>
-          <ListColumn align="left">
+          <ListColumn>
             <ListHeaderTitle>
               <Trans>Asset</Trans>
             </ListHeaderTitle>
           </ListColumn>
 
-          <ListColumn align="left">
+          <ListColumn>
             <ListHeaderTitle>
               <Trans>Source</Trans>
               <SvgIcon sx={{ fontSize: '13px', mx: 1 }}>
@@ -104,13 +103,13 @@ export function BridgeWrapper() {
             </ListHeaderTitle>
           </ListColumn>
 
-          <ListColumn align="left">
+          <ListColumn>
             <ListHeaderTitle>
               <Trans>Age</Trans>
             </ListHeaderTitle>
           </ListColumn>
 
-          <ListColumn align="left">
+          <ListColumn>
             <ListHeaderTitle>
               <Trans>Status</Trans>
             </ListHeaderTitle>

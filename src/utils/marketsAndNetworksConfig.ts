@@ -169,6 +169,7 @@ export const getProvider = (chainId: ChainId): ProviderWithSend => {
     ) {
       // No private RPC or there is a fork configured, use public ones directly
       const chainProviders: string[] = [];
+
       if (config.publicJsonRPCUrl.length) {
         config.publicJsonRPCUrl.map((rpc) => chainProviders.push(rpc));
       }
@@ -185,12 +186,6 @@ export const getProvider = (chainId: ChainId): ProviderWithSend => {
     }
   }
   return providers[chainId];
-};
-
-export const getENSProvider = () => {
-  const chainId = 1;
-  const config = getNetworkConfig(chainId);
-  return new StaticJsonRpcProvider(config.publicJsonRPCUrl[0], chainId);
 };
 
 const ammDisableProposal = 'https://governance-v2.aave.com/governance/proposal/44';

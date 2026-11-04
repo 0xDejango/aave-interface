@@ -1,6 +1,5 @@
 import { ProtocolAction } from '@aave/contract-helpers';
-import { SwitchHorizontalIcon } from '@heroicons/react/outline';
-import { EyeIcon } from '@heroicons/react/solid';
+import { InformationCircleIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
 import {
   Box,
@@ -15,19 +14,26 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { ContentWithTooltip } from 'src/components/ContentWithTooltip';
+import { DotsHorizontalIcon } from 'src/components/icons/DotsHorizontalIcon';
+import { SwapIcon } from 'src/components/icons/SwapIcon';
 import { IncentivesCard } from 'src/components/incentives/IncentivesCard';
 import { WrappedTokenTooltipContent } from 'src/components/infoTooltips/WrappedTokenToolTipContent';
+import { LIST_CARDS_BELOW } from 'src/components/lists/listBreakpoints';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
 import { NoData } from 'src/components/primitives/NoData';
 import { Row } from 'src/components/primitives/Row';
 import { TokenIcon } from 'src/components/primitives/TokenIcon';
+import { isFunSupplyAsset } from 'src/components/transactions/FunCheckout/funSupplyAssets';
+import { FunSupplyButton } from 'src/components/transactions/FunCheckout/FunSupplyButton';
 import { WalletBalancesMap } from 'src/hooks/app-data-provider/useWalletBalances';
 import { useAssetCaps } from 'src/hooks/useAssetCaps';
 import { useModalContext } from 'src/hooks/useModal';
 import { useWrappedTokens } from 'src/hooks/useWrappedTokens';
 import { useRootStore } from 'src/store/root';
+import { iconButtonSx, mobileCardActionsSx } from 'src/utils/buttonStyles';
 import { DashboardReserve } from 'src/utils/dashboardSortUtils';
 import { DASHBOARD } from 'src/utils/events';
+import { onAccent } from 'src/utils/figmaColors';
 import { isFeatureEnabled } from 'src/utils/marketsAndNetworksConfig';
 import { showExternalIncentivesTooltip } from 'src/utils/utils';
 
@@ -47,9 +53,10 @@ export const SupplyAssetsListItem = (
   params: DashboardReserve & { walletBalances: WalletBalancesMap }
 ) => {
   const theme = useTheme();
-  const downToXSM = useMediaQuery(theme.breakpoints.down('xsm'));
+  const showCards = useMediaQuery(theme.breakpoints.down(LIST_CARDS_BELOW));
   const { supplyCap } = useAssetCaps();
   const wrappedTokenReserves = useWrappedTokens();
+  const currentMarket = useRootStore((store) => store.currentMarket);
 
   const { isActive, isFreezed, walletBalance, underlyingAsset } = params;
 
@@ -61,10 +68,15 @@ export const SupplyAssetsListItem = (
     wrappedToken &&
     params.walletBalances[wrappedToken.tokenIn.underlyingAsset.toLowerCase()].amount !== '0';
 
+  // fun-routed assets can be supplied from any EVM asset / fiat via the funkit
+  // checkout, so an empty wallet doesn't block supplying them (protocol-level
+  // blocks — inactive/frozen/capped — still apply).
+  const isFunSupply = isFunSupplyAsset(currentMarket, underlyingAsset);
+
   const disableSupply =
     !isActive ||
     isFreezed ||
-    (Number(walletBalance) <= 0 && !canSupplyAsWrappedToken) ||
+    (Number(walletBalance) <= 0 && !canSupplyAsWrappedToken && !isFunSupply) ||
     supplyCap.isMaxed;
 
   const props: SupplyAssetsListItemProps = {
@@ -74,7 +86,7 @@ export const SupplyAssetsListItem = (
     walletBalancesMap: params.walletBalances,
   };
 
-  if (downToXSM) {
+  if (showCards) {
     return <SupplyAssetsListItemMobile {...props} />;
   } else {
     return <SupplyAssetsListItemDesktop {...props} />;
@@ -110,7 +122,7 @@ export const SupplyAssetsListItemDesktop = ({
   const currentMarket = useRootStore((store) => store.currentMarket);
   const wrappedTokenReserves = useWrappedTokens();
 
-  const { openSupply, openSwitch } = useModalContext();
+  const { openSwitch } = useModalContext();
 
   // Disable the asset to prevent it from being supplied if supply cap has been reached
   const { supplyCap: supplyCapUsage, debtCeiling } = useAssetCaps();
@@ -180,12 +192,7 @@ export const SupplyAssetsListItemDesktop = ({
                 justifyContent: 'center',
               }}
             >
-              <FormattedNumber
-                value={0}
-                variant="secondary14"
-                sx={{ mb: '2px' }}
-                symbolsColor="common.white"
-              />
+              <FormattedNumber value={0} variant="h5" sx={{ mb: '2px' }} symbolsColor={onAccent} />
               <Stack direction="row" alignItems="center">
                 <TokenIcon sx={{ fontSize: '14px', mr: 1 }} symbol="DAI" />
                 <FormattedNumber
@@ -193,8 +200,8 @@ export const SupplyAssetsListItemDesktop = ({
                     walletBalancesMap[wrappedToken.tokenIn.underlyingAsset.toLowerCase()].amount
                   }
                   visibleDecimals={2}
-                  variant="secondary12"
-                  color="text.secondary"
+                  variant="subheader2"
+                  color="fg-2"
                 />
               </Stack>
             </Box>
@@ -229,7 +236,7 @@ export const SupplyAssetsListItemDesktop = ({
 
       <ListColumn>
         {debtCeiling.isMaxed ? (
-          <NoData variant="main14" color="text.secondary" />
+          <NoData variant="subheader1" />
         ) : (
           <ListItemCanBeCollateral
             isIsolated={isIsolated}
@@ -239,28 +246,27 @@ export const SupplyAssetsListItemDesktop = ({
       </ListColumn>
 
       <ListButtonsColumn>
-        <Button
+        <FunSupplyButton
           disabled={disableSupply}
-          variant="contained"
-          onClick={() => {
-            openSupply(underlyingAsset, currentMarket, name, 'dashboard');
-          }}
-        >
-          <Trans>Supply</Trans>
-        </Button>
+          underlyingAsset={underlyingAsset}
+          name={name}
+          symbol={symbol}
+          iconSymbol={iconSymbol}
+          supplyAPY={supplyAPY}
+          collateralEnabled={usageAsCollateralEnabledOnUser}
+          walletBalance={walletBalance}
+        />
         <Button
           id="supply-extra-button"
-          sx={{
-            minWidth: 0,
-            px: 4,
-          }}
-          variant="outlined"
+          sx={iconButtonSx}
+          size="small"
+          variant="tertiary"
           onClick={handleClick}
           aria-controls={open ? 'basic-menu' : undefined}
           aria-haspopup="true"
           aria-expanded={open ? 'true' : undefined}
         >
-          <Trans>...</Trans>
+          <DotsHorizontalIcon sx={{ fontSize: 20, color: 'fg-3' }} />
         </Button>
         <Menu
           id="supply-item-extra-menu"
@@ -286,10 +292,8 @@ export const SupplyAssetsListItemDesktop = ({
             onClick={handleSwitchClick}
             disabled={!isFeatureEnabled.switch(currentMarketData)}
           >
-            <SvgIcon fontSize="small">
-              <SwitchHorizontalIcon />
-            </SvgIcon>
-            <ListItemText>Switch</ListItemText>
+            <SwapIcon fontSize="small" />
+            <ListItemText>Swap</ListItemText>
           </MenuItem>
           <MenuItem
             sx={{ gap: 2 }}
@@ -298,7 +302,7 @@ export const SupplyAssetsListItemDesktop = ({
             onClick={onDetailsClick}
           >
             <SvgIcon fontSize="small">
-              <EyeIcon />
+              <InformationCircleIcon />
             </SvgIcon>
             <ListItemText>Details</ListItemText>
           </MenuItem>
@@ -328,7 +332,6 @@ export const SupplyAssetsListItemMobile = ({
   walletBalancesMap,
 }: SupplyAssetsListItemProps) => {
   const currentMarket = useRootStore((store) => store.currentMarket);
-  const { openSupply } = useModalContext();
   const wrappedTokenReserves = useWrappedTokens();
 
   // Disable the asset to prevent it from being supplied if supply cap has been reached
@@ -338,7 +341,6 @@ export const SupplyAssetsListItemMobile = ({
   const wrappedToken = wrappedTokenReserves.find(
     (r) => r.tokenOut.underlyingAsset === underlyingAsset
   );
-
   return (
     <ListMobileItemWrapper
       symbol={symbol}
@@ -378,12 +380,7 @@ export const SupplyAssetsListItemMobile = ({
                 justifyContent: 'center',
               }}
             >
-              <FormattedNumber
-                value={0}
-                variant="secondary14"
-                sx={{ mb: '2px' }}
-                symbolsColor="common.white"
-              />
+              <FormattedNumber value={0} variant="h5" sx={{ mb: '2px' }} symbolsColor={onAccent} />
               <Stack direction="row" alignItems="center">
                 <TokenIcon sx={{ fontSize: '14px', mr: 1 }} symbol="DAI" />
                 <FormattedNumber
@@ -391,8 +388,8 @@ export const SupplyAssetsListItemMobile = ({
                     walletBalancesMap[wrappedToken.tokenIn.underlyingAsset.toLowerCase()].amount
                   }
                   visibleDecimals={2}
-                  variant="secondary12"
-                  color="text.secondary"
+                  variant="subheader2"
+                  color="fg-2"
                 />
               </Stack>
             </Box>
@@ -426,7 +423,7 @@ export const SupplyAssetsListItemMobile = ({
           incentives={aIncentivesData}
           address={aTokenAddress}
           symbol={symbol}
-          variant="secondary14"
+          variant="h5"
           market={currentMarket}
           protocolAction={ProtocolAction.supply}
         />
@@ -444,18 +441,21 @@ export const SupplyAssetsListItemMobile = ({
         />
       </Row>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 5 }}>
-        <Button
+      <Box sx={mobileCardActionsSx}>
+        <FunSupplyButton
           disabled={disableSupply}
-          variant="contained"
-          onClick={() => openSupply(underlyingAsset, currentMarket, name, 'dashboard')}
-          sx={{ mr: 1.5 }}
+          underlyingAsset={underlyingAsset}
+          name={name}
+          symbol={symbol}
+          iconSymbol={iconSymbol}
+          supplyAPY={supplyAPY}
+          collateralEnabled={usageAsCollateralEnabledOnUser}
+          walletBalance={walletBalance}
+          size="medium"
           fullWidth
-        >
-          <Trans>Supply</Trans>
-        </Button>
+        />
         <Button
-          variant="outlined"
+          variant="tertiary"
           component={Link}
           href={ROUTES.reserveOverview(detailsAddress, currentMarket)}
           fullWidth

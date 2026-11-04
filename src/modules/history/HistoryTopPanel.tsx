@@ -1,29 +1,21 @@
 import { Trans } from '@lingui/macro';
-import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
-import * as React from 'react';
-import { PageTitle } from 'src/components/TopInfoPanel/PageTitle';
-
-import { TopInfoPanel } from '../../components/TopInfoPanel/TopInfoPanel';
+import { Box, Typography } from '@mui/material';
+import { MarketSwitcher } from 'src/components/MarketSwitcher';
+import { PageHeader } from 'src/components/PageHeader/PageHeader';
 
 export const HistoryTopPanel = () => {
-  const { breakpoints } = useTheme();
-  const md = useMediaQuery(breakpoints.down('md'));
-  const xsm = useMediaQuery(breakpoints.down('xsm'));
-
   return (
-    <TopInfoPanel
-      pageTitle={<></>}
-      titleComponent={
+    <PageHeader
+      disableTitleTypography
+      title={
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="h3" sx={{ color: '#A5A8B6' }}>
-              <Trans>Transaction history</Trans>
-            </Typography>
-          </Box>
-          <PageTitle withMarketSwitcher={true} />
-          <Box sx={{ width: md ? (xsm ? '320px' : '540px') : '860px' }} />
+          <Typography variant="h5" sx={{ color: 'fg-3', mb: '0.75rem' }}>
+            <Trans>Transaction history</Trans>
+          </Typography>
+          <MarketSwitcher hideDescription />
         </Box>
       }
+      description={<Trans>This list may not include all your swaps.</Trans>}
     />
   );
 };

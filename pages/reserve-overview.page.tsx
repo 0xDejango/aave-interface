@@ -1,15 +1,19 @@
 import { Trans } from '@lingui/macro';
 import { Box, Typography } from '@mui/material';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import StyledToggleButton from 'src/components/StyledToggleButton';
-import StyledToggleButtonGroup from 'src/components/StyledToggleButtonGroup';
+import { StyledTxModalToggleButton } from 'src/components/StyledToggleButton';
+import { StyledTxModalToggleGroup } from 'src/components/StyledToggleButtonGroup';
 import {
   ComputedReserveData,
+  ReserveWithId,
   useAppDataContext,
 } from 'src/hooks/app-data-provider/useAppDataProvider';
 import { AssetCapsProvider } from 'src/hooks/useAssetCaps';
+import { AssetCapsProviderSDK } from 'src/hooks/useAssetCapsSDK';
 import { MainLayout } from 'src/layouts/MainLayout';
+import { isAssetHidden } from 'src/modules/dashboard/lists/constants';
 import { ReserveActions } from 'src/modules/reserve-overview/ReserveActions';
 import { ReserveConfigurationWrapper } from 'src/modules/reserve-overview/ReserveConfigurationWrapper';
 import { ReserveTopDetailsWrapper } from 'src/modules/reserve-overview/ReserveTopDetailsWrapper';
@@ -17,25 +21,63 @@ import { useRootStore } from 'src/store/root';
 
 import { ContentContainer } from '../src/components/ContentContainer';
 
+const SavingsGhoDepositModal = dynamic(() =>
+  import('../src/components/transactions/SavingsGho/SavingsGhoDepositModal').then(
+    (module) => module.SavingsGhoDepositModal
+  )
+);
+const SavingsGhoWithdrawModal = dynamic(() =>
+  import('../src/components/transactions/SavingsGho/SavingsGhoWithdrawModal').then(
+    (module) => module.SavingsGhoWithdrawModal
+  )
+);
+const StakeModal = dynamic(() =>
+  import('../src/components/transactions/Stake/StakeModal').then((module) => module.StakeModal)
+);
+const StakeCooldownModal = dynamic(() =>
+  import('../src/components/transactions/StakeCooldown/StakeCooldownModal').then(
+    (module) => module.StakeCooldownModal
+  )
+);
+const UnStakeModal = dynamic(() =>
+  import('../src/components/transactions/UnStake/UnStakeModal').then(
+    (module) => module.UnStakeModal
+  )
+);
+
 export default function ReserveOverview() {
   const router = useRouter();
-  const { reserves } = useAppDataContext();
-  const underlyingAsset = router.query.underlyingAsset as string;
+  const { supplyReserves, reserves } = useAppDataContext();
+  const underlyingAsset = (router.query.underlyingAsset as string)?.toLowerCase();
 
   const [mode, setMode] = useState<'overview' | 'actions' | ''>('overview');
   const trackEvent = useRootStore((store) => store.trackEvent);
+  const currentMarket = useRootStore((store) => store.currentMarket);
 
-  const reserve = reserves.find(
-    (reserve) => reserve.underlyingAsset === underlyingAsset
-  ) as ComputedReserveData;
+  const reserveHidden = !!underlyingAsset && isAssetHidden(currentMarket, underlyingAsset);
 
+  useEffect(() => {
+    if (router.isReady && reserveHidden) {
+      router.replace('/markets');
+    }
+  }, [router, reserveHidden]);
+
+  //With SDK
+  const reserve = supplyReserves.find((reserve) => {
+    return reserve.underlyingToken.address.toLowerCase() === underlyingAsset?.toLowerCase();
+  }) as ReserveWithId;
+
+  //With Reserves
+  const reserveLegacy = reserves.find((reserve) => {
+    return reserve.underlyingAsset.toLowerCase() === underlyingAsset?.toLowerCase();
+  }) as ComputedReserveData;
   const [pageEventCalled, setPageEventCalled] = useState(false);
 
   useEffect(() => {
-    if (!pageEventCalled && reserve && reserve.iconSymbol && underlyingAsset) {
+    if (!pageEventCalled && reserve && reserve.underlyingToken.symbol && underlyingAsset) {
       trackEvent('Page Viewed', {
         'Page Name': 'Reserve Overview',
-        Reserve: reserve.iconSymbol,
+        Reserve: reserve.underlyingToken.symbol,
         Asset: underlyingAsset,
       });
       setPageEventCalled(true);
@@ -44,36 +86,39 @@ export default function ReserveOverview() {
 
   const isOverview = mode === 'overview';
 
+  if (reserveHidden) {
+    return null;
+  }
+
   return (
-    <AssetCapsProvider asset={reserve}>
+    <AssetCapsProviderSDK asset={reserve}>
       <ReserveTopDetailsWrapper underlyingAsset={underlyingAsset} />
 
       <ContentContainer>
         <Box
           sx={{
             display: { xs: 'flex', lg: 'none' },
-            justifyContent: { xs: 'center', xsm: 'flex-start' },
-            mb: { xs: 3, xsm: 4 },
+            mb: '1.5rem',
           }}
         >
-          <StyledToggleButtonGroup
+          <StyledTxModalToggleGroup
             color="primary"
             value={mode}
             exclusive
             onChange={(_, value) => setMode(value)}
-            sx={{ width: { xs: '100%', xsm: '359px' }, height: '44px' }}
+            sx={{ width: { xs: '100%', xsm: '359px' } }}
           >
-            <StyledToggleButton value="overview" disabled={mode === 'overview'}>
+            <StyledTxModalToggleButton value="overview" disabled={mode === 'overview'}>
               <Typography variant="subheader1">
                 <Trans>Overview</Trans>
               </Typography>
-            </StyledToggleButton>
-            <StyledToggleButton value="actions" disabled={mode === 'actions'}>
+            </StyledTxModalToggleButton>
+            <StyledTxModalToggleButton value="actions" disabled={mode === 'actions'}>
               <Typography variant="subheader1">
                 <Trans>Your info</Trans>
               </Typography>
-            </StyledToggleButton>
-          </StyledToggleButtonGroup>
+            </StyledTxModalToggleButton>
+          </StyledTxModalToggleGroup>
         </Box>
 
         <Box sx={{ display: 'flex' }}>
@@ -95,14 +140,26 @@ export default function ReserveOverview() {
               width: { xs: '100%', lg: '416px' },
             }}
           >
-            <ReserveActions reserve={reserve} />
+            {/* Wrapped in AssetCapsProvider to provide the data using legacy method to avoid braking actions */}
+            <AssetCapsProvider asset={reserveLegacy}>
+              <ReserveActions reserve={reserveLegacy} />
+            </AssetCapsProvider>
           </Box>
         </Box>
       </ContentContainer>
-    </AssetCapsProvider>
+    </AssetCapsProviderSDK>
   );
 }
 
 ReserveOverview.getLayout = function getLayout(page: React.ReactElement) {
-  return <MainLayout>{page}</MainLayout>;
+  return (
+    <MainLayout>
+      {page}
+      <StakeModal />
+      <StakeCooldownModal />
+      <UnStakeModal />
+      <SavingsGhoDepositModal />
+      <SavingsGhoWithdrawModal />
+    </MainLayout>
+  );
 };

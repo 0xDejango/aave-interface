@@ -1,61 +1,106 @@
-import { Box, Paper, Skeleton, Stack } from '@mui/material';
+import { Trans } from '@lingui/macro';
+import { Box, Paper, Skeleton, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 import InfiniteScroll from 'react-infinite-scroller';
 import { NoSearchResults } from 'src/components/NoSearchResults';
-import { Proposal, useProposals } from 'src/hooks/governance/useProposals';
-import { useProposalsSearch } from 'src/hooks/governance/useProposalsSearch';
+import { Link, ROUTES } from 'src/components/primitives/Link';
+import {
+  useGovernanceProposals,
+  useGovernanceProposalsSearch,
+} from 'src/hooks/governance/useGovernanceCache';
+import { useRootStore } from 'src/store/root';
+import { GOVERNANCE_PAGE } from 'src/utils/events';
+import { figVars } from 'src/utils/figmaColors';
+import { motion } from 'src/utils/motion';
 
+import { badgeToCacheState } from './adapters';
 import { ProposalListHeader } from './ProposalListHeader';
-import { ProposalV3ListItem } from './ProposalV3ListItem';
-import { stringToState } from './StateBadge';
+import { ProposalBadgeState, StateBadge } from './StateBadge';
+import { ProposalListItem } from './types';
 import { VoteBar } from './VoteBar';
 
-export const ProposalsV3List = () => {
-  const [proposalFilter, setProposalFilter] = useState<string>('all');
-  const filterState = stringToState(proposalFilter);
-
-  const [searchTerm, setSearchTerm] = useState<string>('');
-
-  const { results: searchResults, loading: loadingSearchResults } = useProposalsSearch(searchTerm);
-
-  const { data, isFetching: loadingProposals, fetchNextPage, hasNextPage } = useProposals();
-
-  let listItems: Proposal[] = [];
-  if (searchTerm && searchResults.length > 0) {
-    listItems = searchResults;
-  }
-
-  if (!searchTerm && data) {
-    data.pages.forEach((page) => listItems.push(...page.proposals));
-  }
-
-  if (proposalFilter !== 'all') {
-    listItems = listItems.filter((proposal) => proposal.badgeState === filterState);
-  }
+const ProposalListItemRow = ({ proposal }: { proposal: ProposalListItem }) => {
+  const trackEvent = useRootStore((store) => store.trackEvent);
 
   return (
-    <Paper>
-      <ProposalListHeader
-        proposalFilter={proposalFilter}
-        handleProposalFilterChange={setProposalFilter}
-        handleSearchQueryChange={setSearchTerm}
-      />
-      {listItems.length > 0 ? (
-        <InfiniteScroll loadMore={() => fetchNextPage()} hasMore={hasNextPage}>
-          {listItems.map((proposal) => (
-            <ProposalV3ListItem key={proposal.subgraphProposal.id} proposal={proposal} />
-          ))}
-          {loadingProposals &&
-            Array.from({ length: 5 }).map((_, i) => <ProposalListSkeleton key={i} />)}
-        </InfiniteScroll>
-      ) : ((!loadingSearchResults && searchTerm) ||
-          (!loadingProposals && proposalFilter !== 'all')) &&
-        listItems.length === 0 ? (
-        <NoSearchResults searchTerm={searchTerm} />
-      ) : (
-        Array.from({ length: 4 }).map((_, i) => <ProposalListSkeleton key={i} />)
-      )}
-    </Paper>
+    <Box
+      sx={{
+        p: 6,
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        borderBottom: `1px solid ${figVars['border-0']}`,
+        transition: `background-color ${motion.duration.hover}ms ${motion.easing.standard}`,
+        '&:hover': { bgcolor: 'overlay-hover-subtle' },
+      }}
+      component={Link}
+      href={ROUTES.dynamicRenderedProposal(+proposal.id)}
+      onClick={() => trackEvent(GOVERNANCE_PAGE.VIEW_AIP, { AIP: proposal.id })}
+    >
+      <Stack
+        direction="column"
+        gap={2}
+        sx={{
+          width: {
+            xs: '100%',
+            lg: '70%',
+          },
+          pr: { xs: 0, lg: 8 },
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Stack direction="row" gap={3} alignItems="center" sx={{ mb: '0.75rem' }}>
+          <StateBadge state={proposal.badgeState} loading={false} />
+        </Stack>
+        <Typography variant="h3" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {proposal.title}
+        </Typography>
+        {proposal.author && (
+          <Typography variant="caption" color="fg-2">
+            Author: {proposal.author.replace(/^@/, '')}
+          </Typography>
+        )}
+        {proposal.shortDescription && (
+          <Typography
+            variant="description"
+            color="fg-2"
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+            }}
+          >
+            {proposal.shortDescription.replace(/^#+\s*/gm, '')}
+          </Typography>
+        )}
+      </Stack>
+      <Stack
+        flexGrow={1}
+        direction="column"
+        justifyContent="center"
+        sx={{
+          pl: { xs: 0, lg: 18 },
+          mt: { xs: 7, lg: 0 },
+        }}
+      >
+        <VoteBar
+          yae
+          percent={proposal.voteInfo.forPercent}
+          votes={proposal.voteInfo.forVotes}
+          sx={{ mb: 4 }}
+          compact
+        />
+        <VoteBar
+          percent={proposal.voteInfo.againstPercent}
+          votes={proposal.voteInfo.againstVotes}
+          compact
+        />
+      </Stack>
+    </Box>
   );
 };
 
@@ -67,7 +112,7 @@ const ProposalListSkeleton = () => {
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
-        borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+        borderBottom: `1px solid ${figVars['border-0']}`,
       }}
     >
       <Stack
@@ -113,5 +158,59 @@ const ProposalListSkeleton = () => {
         <VoteBar percent={0} votes={0} loading />
       </Stack>
     </Box>
+  );
+};
+
+export const ProposalsV3List = () => {
+  const [proposalFilter, setProposalFilter] = useState<string>('all');
+  // The dropdown's values are the badge labels; the backend filters on cache states.
+  const filterBadge = proposalFilter === 'all' ? undefined : (proposalFilter as ProposalBadgeState);
+
+  const [searchTerm, setSearchTerm] = useState<string>('');
+
+  const { results: searchResults, loading: loadingSearchResults } =
+    useGovernanceProposalsSearch(searchTerm);
+
+  const {
+    data,
+    isFetching: loadingProposals,
+    fetchNextPage,
+    hasNextPage,
+  } = useGovernanceProposals(filterBadge && badgeToCacheState(filterBadge));
+
+  let listItems: ProposalListItem[] = [];
+
+  if (searchTerm && searchResults.length > 0) {
+    listItems = searchResults;
+  } else if (!searchTerm && data) {
+    data.pages.forEach((page) => listItems.push(...page.proposals));
+  }
+
+  return (
+    <Paper variant="table" sx={{ overflow: 'hidden' }}>
+      <ProposalListHeader
+        proposalFilter={proposalFilter}
+        handleProposalFilterChange={setProposalFilter}
+        handleSearchQueryChange={setSearchTerm}
+      />
+      {listItems.length > 0 ? (
+        <InfiniteScroll loadMore={() => fetchNextPage()} hasMore={hasNextPage && !searchTerm}>
+          {listItems.map((proposal) => (
+            <ProposalListItemRow key={proposal.id} proposal={proposal} />
+          ))}
+          {loadingProposals &&
+            Array.from({ length: 5 }).map((_, i) => <ProposalListSkeleton key={i} />)}
+        </InfiniteScroll>
+      ) : ((!loadingSearchResults && searchTerm) ||
+          (!loadingProposals && proposalFilter !== 'all')) &&
+        listItems.length === 0 ? (
+        <NoSearchResults
+          searchTerm={searchTerm}
+          subtitle={<Trans>We couldn&apos;t find any proposals related to your search.</Trans>}
+        />
+      ) : (
+        Array.from({ length: 4 }).map((_, i) => <ProposalListSkeleton key={i} />)
+      )}
+    </Paper>
   );
 };

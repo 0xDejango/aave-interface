@@ -10,17 +10,23 @@ import {
   celo,
   Chain,
   gnosis,
+  ink,
   linea,
   mainnet,
+  mantle,
+  megaeth,
   metis,
+  monad,
   optimism,
   optimismSepolia,
+  plasma,
   polygon,
   scroll,
   scrollSepolia,
   sepolia,
   soneium,
   sonic,
+  xLayer,
   zksync,
 } from 'wagmi/chains';
 
@@ -39,8 +45,6 @@ export type NetworkConfig = {
   name: string;
   displayName?: string;
   publicJsonRPCUrl: readonly string[]; // public rpc used if not private found
-  // https://github.com/aave/aave-api
-  ratesHistoryApiUrl?: string;
   baseUniswapAdapter?: string;
   /**
    * When this is set withdrawals will automatically be unwrapped
@@ -70,18 +74,10 @@ export type NetworkConfig = {
 
 export type BaseNetworkConfig = Omit<NetworkConfig, 'explorerLinkBuilder'>;
 
-const ratesHistoryApiUrl = `${process.env.NEXT_PUBLIC_API_BASEURL}/data/rates-history`;
-
 export const testnetConfig: Record<string, BaseNetworkConfig> = {
   [ChainId.sepolia]: {
     name: 'Ethereum Sepolia',
-    publicJsonRPCUrl: [
-      'https://eth-sepolia.public.blastapi.io',
-      'https://rpc.sepolia.org',
-      'https://rpc2.sepolia.org',
-      'https://rpc.sepolia.online',
-      'https://www.sepoliarpc.space',
-    ],
+    publicJsonRPCUrl: ['https://ethereum-sepolia-rpc.publicnode.com'],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
@@ -95,8 +91,7 @@ export const testnetConfig: Record<string, BaseNetworkConfig> = {
     name: 'Avalanche Fuji',
     publicJsonRPCUrl: [
       'https://api.avax-test.network/ext/bc/C/rpc',
-      'https://rpc.ankr.com/avalanche_fuji',
-      'https://ava-testnet.public.blastapi.io/ext/bc/C/rpc',
+      'https://avalanche-fuji-c-chain-rpc.publicnode.com',
     ],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'AVAX',
@@ -116,7 +111,7 @@ export const testnetConfig: Record<string, BaseNetworkConfig> = {
     name: 'Arbitrum Sepolia',
     publicJsonRPCUrl: [
       'https://sepolia-rollup.arbitrum.io/rpc',
-      'https://public.stackup.sh/api/v1/node/arbitrum-sepolia',
+      'https://arbitrum-sepolia-rpc.publicnode.com',
     ],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'ETH',
@@ -129,11 +124,7 @@ export const testnetConfig: Record<string, BaseNetworkConfig> = {
   },
   [ChainId.base_sepolia]: {
     name: 'Base Sepolia',
-    publicJsonRPCUrl: [
-      'https://base-sepolia.blockpi.network/v1/rpc/public',
-      'https://sepolia.base.org',
-      'https://base-sepolia.gateway.tenderly.co',
-    ],
+    publicJsonRPCUrl: ['https://sepolia.base.org', 'https://base-sepolia.gateway.tenderly.co'],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
@@ -178,8 +169,6 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
     publicJsonRPCUrl: [
       'https://mainnet.gateway.tenderly.co',
       'https://rpc.flashbots.net',
-      'https://eth.llamarpc.com',
-      'https://eth-mainnet.public.blastapi.io',
       'https://ethereum-rpc.publicnode.com',
     ],
     baseUniswapAdapter: '0xc3efa200a60883a96ffe3d5b492b121d6e9a1f3f',
@@ -187,7 +176,6 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
     wrappedBaseAssetSymbol: 'WETH',
     baseAssetDecimals: 18,
     explorerLink: 'https://etherscan.io',
-    ratesHistoryApiUrl,
     networkLogoPath: '/icons/networks/ethereum.svg',
     wagmiChain: mainnet,
   },
@@ -196,10 +184,7 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
     displayName: 'Polygon',
     publicJsonRPCUrl: [
       'https://gateway.tenderly.co/public/polygon',
-      'https://polygon-pokt.nodies.app',
       'https://polygon-bor-rpc.publicnode.com',
-      'https://polygon-rpc.com',
-      'https://polygon-mainnet.public.blastapi.io',
       'https://rpc-mainnet.matic.quiknode.pro',
     ],
     baseAssetSymbol: 'POL',
@@ -212,15 +197,13 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Polygon PoS Bridge',
       url: 'https://wallet.polygon.technology/polygon/bridge',
     },
-    ratesHistoryApiUrl,
     wagmiChain: polygon,
   },
   [ChainId.avalanche]: {
     name: 'Avalanche',
     publicJsonRPCUrl: [
       'https://api.avax.network/ext/bc/C/rpc',
-      'https://ava-mainnet.public.blastapi.io/ext/bc/C/rpc',
-      'https://rpc.ankr.com/avalanche',
+      'https://avalanche-c-chain-rpc.publicnode.com',
     ],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'AVAX',
@@ -233,16 +216,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Avalanche Bridge',
       url: 'https://bridge.avax.network/',
     },
-    ratesHistoryApiUrl,
     wagmiChain: avalanche,
   },
   [ChainId.arbitrum_one]: {
     name: 'Arbitrum',
-    publicJsonRPCUrl: [
-      'https://arb1.arbitrum.io/rpc',
-      'https://rpc.ankr.com/arbitrum',
-      'https://1rpc.io/arb',
-    ],
+    publicJsonRPCUrl: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com'],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
@@ -254,17 +232,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Arbitrum Bridge',
       url: 'https://bridge.arbitrum.io',
     },
-    ratesHistoryApiUrl,
     wagmiChain: arbitrum,
   },
   [ChainId.base]: {
     name: 'Base',
-    publicJsonRPCUrl: [
-      'https://mainnet.base.org',
-      'https://1rpc.io/base',
-      'https://base.publicnode.com',
-      'https://base-mainnet.public.blastapi.io',
-    ],
+    publicJsonRPCUrl: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
@@ -276,12 +248,14 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Base Bridge',
       url: 'https://bridge.base.org/',
     },
-    ratesHistoryApiUrl,
     wagmiChain: base,
   },
   [ChainId.optimism]: {
     name: 'OP',
-    publicJsonRPCUrl: ['https://optimism-mainnet.public.blastapi.io', 'https://1rpc.io/op'],
+    publicJsonRPCUrl: [
+      'https://public-op-mainnet.fastnode.io',
+      'https://optimism-rpc.publicnode.com',
+    ],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
@@ -293,7 +267,6 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'OP Bridge',
       url: 'https://app.optimism.io/bridge',
     },
-    ratesHistoryApiUrl,
     wagmiChain: optimism,
   },
   [ChainId.metis_andromeda]: {
@@ -304,12 +277,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
     baseAssetDecimals: 0, // N/A
     explorerLink: 'https://andromeda-explorer.metis.io',
     networkLogoPath: '/icons/networks/metis.svg',
-    ratesHistoryApiUrl,
     wagmiChain: metis,
   },
   [ChainId.xdai]: {
     name: 'Gnosis Chain',
-    publicJsonRPCUrl: ['https://rpc.ankr.com/gnosis', 'https://rpc.gnosischain.com'],
+    publicJsonRPCUrl: ['https://gnosis-rpc.publicnode.com', 'https://rpc.gnosischain.com'],
     baseUniswapAdapter: '0x0',
     baseAssetSymbol: 'xDAI',
     wrappedBaseAssetSymbol: 'WXDAI',
@@ -322,12 +294,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'xDai Bridge',
       url: 'https://bridge.gnosischain.com/',
     },
-    ratesHistoryApiUrl,
     wagmiChain: gnosis,
   },
   [ChainId.bnb]: {
     name: 'Binance Smart Chain',
-    publicJsonRPCUrl: ['https://bsc.publicnode.com	', 'wss://bsc.publicnode.com'],
+    publicJsonRPCUrl: ['https://bsc-rpc.publicnode.com'],
     baseAssetSymbol: 'BNB',
     wrappedBaseAssetSymbol: 'WBNB',
     baseAssetDecimals: 18,
@@ -338,12 +309,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'BNB Bridge',
       url: 'https://www.bnbchain.org/en/bnb-chain-bridges',
     },
-    ratesHistoryApiUrl,
     wagmiChain: bsc,
   },
   [ChainId.scroll]: {
     name: 'Scroll',
-    publicJsonRPCUrl: ['https://rpc.scroll.io', 'https://rpc.ankr.com/scroll'],
+    publicJsonRPCUrl: ['https://rpc.scroll.io', 'https://scroll-rpc.publicnode.com'],
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
     baseAssetDecimals: 18,
@@ -354,7 +324,6 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Scroll Bridge',
       url: 'https://scroll.io/bridge',
     },
-    ratesHistoryApiUrl,
     wagmiChain: scroll,
   },
   [ChainId.zksync]: {
@@ -370,16 +339,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'ZKsync Bridge',
       url: 'https://portal.zksync.io/bridge/',
     },
-    ratesHistoryApiUrl,
     wagmiChain: zksync,
   },
   [ChainId.linea]: {
     name: 'Linea',
-    publicJsonRPCUrl: [
-      'https://1rpc.io/linea',
-      'https://linea.drpc.org',
-      'https://linea-rpc.publicnode.com',
-    ],
+    publicJsonRPCUrl: ['https://linea.drpc.org', 'https://linea-rpc.publicnode.com'],
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
     baseAssetDecimals: 18,
@@ -390,7 +354,6 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Linea Bridge',
       url: 'https://bridge.linea.build/',
     },
-    ratesHistoryApiUrl,
     wagmiChain: linea,
   },
   [ChainId.sonic]: {
@@ -410,12 +373,11 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       name: 'Sonic Bridge',
       url: 'https://gateway.soniclabs.com',
     },
-    ratesHistoryApiUrl,
     wagmiChain: sonic,
   },
   [ChainId.celo]: {
     name: 'Celo',
-    publicJsonRPCUrl: ['https://rpc.ankr.com/celo', 'https://celo.drpc.org'],
+    publicJsonRPCUrl: ['https://rpc.ankr.com/celo', 'https://celo-rpc.publicnode.com'],
     baseAssetSymbol: '', // N/A
     wrappedBaseAssetSymbol: '', // N/A
     baseAssetDecimals: 0, // N/A
@@ -430,7 +392,7 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
   },
   [ChainId.soneium]: {
     name: 'Soneium',
-    publicJsonRPCUrl: ['https://soneium.drpc.org', 'https://rpc.soneium.org'],
+    publicJsonRPCUrl: ['https://rpc.soneium.org', 'https://soneium.drpc.org'],
     baseAssetSymbol: 'ETH',
     wrappedBaseAssetSymbol: 'WETH',
     baseAssetDecimals: 18,
@@ -442,6 +404,76 @@ export const prodNetworkConfig: Record<string, BaseNetworkConfig> = {
       url: 'https://soneium.org/en/bridges/',
     },
     wagmiChain: soneium,
+  },
+  [ChainId.plasma]: {
+    name: 'Plasma',
+    publicJsonRPCUrl: ['https://rpc.plasma.to'],
+    baseAssetSymbol: 'XPL',
+    wrappedBaseAssetSymbol: 'WXPL',
+    baseAssetDecimals: 18,
+    explorerLink: 'https://plasmascan.to',
+    networkLogoPath: '/icons/networks/plasma.svg',
+    wagmiChain: plasma,
+    bridge: {
+      icon: '/icons/networks/plasma.svg',
+      name: 'Plasma Bridge',
+      url: 'https://stargate.finance/bridge?srcChain=ethereum&srcToken=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&dstChain=plasma&dstToken=0x9895D81bB462A195b4922ED7De0e3ACD007c32CB',
+    },
+  },
+  [ChainId.ink]: {
+    name: 'Ink',
+    publicJsonRPCUrl: ['https://ink.drpc.org'],
+    baseAssetSymbol: 'ETH',
+    wrappedBaseAssetSymbol: 'WETH',
+    baseAssetDecimals: 18,
+    explorerLink: 'https://explorer.inkonchain.com/',
+    networkLogoPath: '/icons/networks/ink.svg',
+    wagmiChain: ink,
+  },
+  [ChainId.mantle]: {
+    name: 'Mantle',
+    publicJsonRPCUrl: ['https://rpc.mantle.xyz'],
+    baseAssetSymbol: 'MNT',
+    wrappedBaseAssetSymbol: 'WMNT',
+    baseAssetDecimals: 18,
+    explorerLink: 'https://mantlescan.xyz',
+    networkLogoPath: '/icons/networks/mantle.svg',
+    wagmiChain: mantle,
+  },
+  [ChainId.xlayer]: {
+    name: 'X Layer',
+    publicJsonRPCUrl: ['https://rpc.xlayer.tech', 'https://xlayer.drpc.org'],
+    baseAssetSymbol: 'OKB',
+    wrappedBaseAssetSymbol: 'WOKB',
+    baseAssetDecimals: 18,
+    explorerLink: 'https://www.oklink.com/xlayer',
+    networkLogoPath: '/icons/networks/xlayer.svg',
+    bridge: {
+      icon: '/icons/networks/xlayer.svg',
+      name: 'X Layer Bridge',
+      url: 'https://www.okx.com/xlayer/bridge',
+    },
+    wagmiChain: xLayer,
+  },
+  [megaeth.id]: {
+    name: 'MegaETH',
+    publicJsonRPCUrl: ['https://mainnet.megaeth.com/rpc'],
+    baseAssetSymbol: 'ETH',
+    wrappedBaseAssetSymbol: 'WETH',
+    baseAssetDecimals: 18,
+    explorerLink: 'https://mega.etherscan.io/',
+    networkLogoPath: '/icons/networks/megaeth.svg',
+    wagmiChain: megaeth,
+  },
+  [monad.id]: {
+    name: 'Monad',
+    publicJsonRPCUrl: ['https://rpc.monad.xyz', 'https://rpc1.monad.xyz'],
+    baseAssetSymbol: 'MON',
+    wrappedBaseAssetSymbol: 'WMON',
+    baseAssetDecimals: 18,
+    explorerLink: 'https://monadscan.com',
+    networkLogoPath: '/icons/networks/monad.svg',
+    wagmiChain: monad,
   },
 };
 

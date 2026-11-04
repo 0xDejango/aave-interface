@@ -1,10 +1,11 @@
+import { ChainId } from '@aave/contract-helpers';
 import { SwitchVerticalIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
 import {
+  Alert,
   Box,
   Button,
   IconButton,
-  SelectChangeEvent,
   Skeleton,
   Stack,
   SvgIcon,
@@ -14,9 +15,9 @@ import { BigNumber } from 'bignumber.js';
 import { constants } from 'ethers';
 import { formatUnits } from 'ethers/lib/utils';
 import React, { useEffect, useState } from 'react';
-import { Link, ROUTES } from 'src/components/primitives/Link';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
+import { Link } from 'src/components/primitives/Link';
 import { Row } from 'src/components/primitives/Row';
-import { Warning } from 'src/components/primitives/Warning';
 import { TextWithTooltip } from 'src/components/TextWithTooltip';
 import {
   DetailsNumberLine,
@@ -24,7 +25,7 @@ import {
 } from 'src/components/transactions/FlowCommons/TxModalDetails';
 import { NetworkSelect } from 'src/components/transactions/NetworkSelect';
 import { ConnectWalletButton } from 'src/components/WalletConnection/ConnectWalletButton';
-import { useBridgeTokens } from 'src/hooks/bridge/useBridgeWalletBalance';
+import { useBridgeTokens, UseBridgeTokensParams } from 'src/hooks/bridge/useBridgeWalletBalance';
 import { TokenInfoWithBalance, useTokensBalance } from 'src/hooks/generic/useTokensBalance';
 import { useModalContext } from 'src/hooks/useModal';
 import { useWeb3Context } from 'src/libs/hooks/useWeb3Context';
@@ -34,9 +35,10 @@ import { GHO_SYMBOL } from 'src/utils/ghoUtilities';
 import { getNetworkConfig, marketsData } from 'src/utils/marketsAndNetworksConfig';
 
 import { AssetInput } from '../AssetInput';
+import { BaseSuccessView } from '../FlowCommons/BaseSuccess';
 import { TxErrorView } from '../FlowCommons/Error';
 import { GasEstimationError } from '../FlowCommons/GasEstimationError';
-import { TxSuccessView } from '../FlowCommons/Success';
+import { TxModalTitle } from '../FlowCommons/TxModalTitle';
 import { ChangeNetworkWarning } from '../Warnings/ChangeNetworkWarning';
 import { BridgeActionProps, BridgeActions } from './BridgeActions';
 import { BridgeAmount } from './BridgeAmount';
@@ -53,10 +55,25 @@ import { useGetBridgeMessage } from './useGetBridgeMessage';
 import { useTimeToDestination } from './useGetFinalityTime';
 
 const defaultNetwork = supportedNetworksWithBridge[0];
-const defaultNetworkMarket = marketsData[defaultNetwork.chainId];
+
+function getUseBridgeTokensParams(chainId: number): UseBridgeTokensParams {
+  const market = Object.values(marketsData).filter(
+    (md) => md.chainId === chainId && md.v3 === true && md.addresses.GHO_TOKEN_ADDRESS
+  )[0];
+  if (!market || !market.addresses.GHO_TOKEN_ADDRESS) {
+    throw new Error('Market not found');
+  }
+
+  return {
+    chainId,
+    ghoTokenAddress: market.addresses.GHO_TOKEN_ADDRESS,
+    tokenOracle: getConfigFor(chainId).tokenOracle,
+    walletBalanceProviderAddress: market.addresses.WALLET_BALANCE_PROVIDER,
+  };
+}
 
 export const BridgeModalContent = () => {
-  const { mainTxState: bridgeTxState, txError, close, gasLimit } = useModalContext();
+  const { mainTxState: bridgeTxState, txError, gasLimit } = useModalContext();
   const user = useRootStore((state) => state.account);
   const [destinationAccount, setDestinationAccount] = useState(user);
   const [amount, setAmount] = useState('');
@@ -77,13 +94,29 @@ export const BridgeModalContent = () => {
   const { data: estimatedTimeToDestination, isFetching: loadingEstimatedTime } =
     useTimeToDestination(sourceNetworkObj.chainId);
 
-  const getFilteredFeeTokens = (chainId: number) => {
-    return laneConfig
-      .filter((token) => token.sourceChainId === chainId)
+  const getFilteredFeeTokens = (sourceChainId: number, destinationChainId: number) => {
+    const sourceFeeTokens = laneConfig
+      .filter((config) => config.sourceChainId === sourceChainId)
       .flatMap((config) => config.feeTokens);
+
+    const destinationFeeTokenSymbols = new Set(
+      laneConfig
+        .filter((config) => config.sourceChainId === destinationChainId)
+        .flatMap((config) => config.feeTokens)
+        .map((token) => token.symbol)
+    );
+
+    // Only include non-native fee tokens (e.g. GHO) if the destination chain also supports them.
+    // This prevents using a fee token on a lane where the onRamp doesn't support it.
+    return sourceFeeTokens.filter(
+      (token) => token.extensions?.isNative || destinationFeeTokenSymbols.has(token.symbol)
+    );
   };
 
-  const filteredFeeTokensByChainId = getFilteredFeeTokens(sourceNetworkObj.chainId);
+  const filteredFeeTokensByChainId = getFilteredFeeTokens(
+    sourceNetworkObj.chainId,
+    destinationNetworkObj.chainId
+  );
 
   const { data: feeTokenListWithBalance, isFetching: loadingTokenBalances } = useTokensBalance(
     filteredFeeTokensByChainId,
@@ -99,8 +132,8 @@ export const BridgeModalContent = () => {
     getGHOToken(feeTokenListWithBalance || filteredFeeTokensByChainId)
   );
 
-  const handleTokenChange = (event: SelectChangeEvent) => {
-    const token = feeTokenListWithBalance?.find((token) => token.symbol === event.target.value);
+  const handleTokenChange = (symbol: string) => {
+    const token = feeTokenListWithBalance?.find((token) => token.symbol === symbol);
 
     if (token) {
       setSelectedFeeToken(token);
@@ -116,16 +149,24 @@ export const BridgeModalContent = () => {
   }, [feeTokenListWithBalance, sourceNetworkObj]);
 
   useEffect(() => {
+    // Reset selected fee token when destination changes if current selection is no longer valid
+    const validSymbols = filteredFeeTokensByChainId.map((t) => t.symbol);
+    if (selectedFeeToken && !validSymbols.includes(selectedFeeToken.symbol)) {
+      setSelectedFeeToken(
+        feeTokenListWithBalance?.find((t) => validSymbols.includes(t.symbol)) ||
+          filteredFeeTokensByChainId[0]
+      );
+    }
+  }, [destinationNetworkObj]);
+
+  useEffect(() => {
     // reset when source network changes
     setAmount('');
     setMaxSelected(false);
   }, [sourceNetworkObj]);
 
-  const { data: sourceTokenInfo, isFetching: fetchingBridgeTokenBalance } = useBridgeTokens(
-    Object.values(marketsData).find((elem) => elem.chainId === sourceNetworkObj.chainId) ||
-      defaultNetworkMarket,
-    getConfigFor(sourceNetworkObj.chainId).tokenOracle
-  );
+  const params = getUseBridgeTokensParams(sourceNetworkObj.chainId);
+  const { data: sourceTokenInfo, isFetching: fetchingBridgeTokenBalance } = useBridgeTokens(params);
 
   const isWrongNetwork = currentChainId !== sourceNetworkObj.chainId;
 
@@ -202,7 +243,10 @@ export const BridgeModalContent = () => {
     setSourceNetworkObj(destinationNetworkObj);
     setDestinationNetworkObj(currentSourceNetworkObj);
 
-    const newFilteredFeeTokens = getFilteredFeeTokens(destinationNetworkObj.chainId);
+    const newFilteredFeeTokens = getFilteredFeeTokens(
+      destinationNetworkObj.chainId,
+      currentSourceNetworkObj.chainId
+    );
     setSelectedFeeToken(newFilteredFeeTokens[0]);
   };
 
@@ -247,27 +291,16 @@ export const BridgeModalContent = () => {
 
   if (bridgeTxState.success) {
     return (
-      <TxSuccessView
-        customAction={
-          <Box mt={5}>
-            <Button
-              component={Link}
-              href={ROUTES.bridge}
-              variant="outlined"
-              size="small"
-              onClick={close}
-            >
-              <Trans>View Bridge Transactions</Trans>
-            </Button>
-          </Box>
-        }
-        customText={
+      <BaseSuccessView
+        txHash={bridgeTxState.txHash}
+        customExplorerLink={`https://ccip.chain.link/tx/${bridgeTxState.txHash}`}
+        customExplorerLinkText={<Trans>View on CCIP Explorer</Trans>}
+        description={
           <Trans>
             Asset has been successfully sent to CCIP contract. You can check the status of the
-            transactions below
+            transactions below.
           </Trans>
         }
-        action={<Trans>Bridged Via CCIP</Trans>}
       />
     );
   }
@@ -281,7 +314,7 @@ export const BridgeModalContent = () => {
           href="https://docs.chain.link/ccip/concepts#finality"
           sx={{ textDecoration: 'underline' }}
           variant="caption"
-          color="text.secondary"
+          color="fg-2"
         >
           Learn more
         </Link>
@@ -298,43 +331,47 @@ export const BridgeModalContent = () => {
     </TextWithTooltip>
   );
 
+  // There's no market config available for ink yet, so skip showing gas station since it relies on having a market
+  const showGasStation = sourceNetworkObj.chainId !== ChainId.ink;
+
   return (
     <>
-      <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="h2">
-          <Trans>Bridge GHO</Trans>
-        </Typography>
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{ mb: 6, height: '1.5rem' }}
+      >
+        <TxModalTitle title={<Trans>Bridge GHO</Trans>} sx={{ mb: 0, pr: 0 }} />
         {user && (
-          <Box
-            sx={{
-              right: '0px',
-            }}
+          <Button
+            component={Link}
+            href={`https://ccip.chain.link/address/${user}`}
+            target="_blank"
+            rel="noopener"
+            variant="tertiary"
+            size="small"
+            endIcon={<ArrowUpRightIcon sx={{ color: 'fg-3' }} />}
+            sx={{ minWidth: 'unset', mr: 9 }}
           >
-            <Button
-              component={Link}
-              href={ROUTES.bridge}
-              sx={{ mr: 8 }}
-              variant="surface"
-              size="small"
-              onClick={close}
-            >
-              <Trans>Transactions</Trans>
-            </Button>
-          </Box>
+            <Trans>Transactions</Trans>
+          </Button>
         )}
       </Box>
 
-      <ChangeNetworkWarning
-        networkName={getNetworkConfig(sourceNetworkObj.chainId).name}
-        chainId={sourceNetworkObj.chainId}
-        event={{
-          eventName: GENERAL.SWITCH_NETWORK,
-        }}
-        sx={{ my: 1, visibility: isWrongNetwork && !readOnlyModeAddress ? 'visible' : 'hidden' }}
-      />
+      {isWrongNetwork && !readOnlyModeAddress && (
+        <ChangeNetworkWarning
+          autoSwitchOnMount={true}
+          networkName={getNetworkConfig(sourceNetworkObj.chainId).name}
+          chainId={sourceNetworkObj.chainId}
+          event={{
+            eventName: GENERAL.SWITCH_NETWORK,
+          }}
+        />
+      )}
       {!user ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', mt: 4, alignItems: 'center' }}>
-          <Typography sx={{ mb: 6, textAlign: 'center' }} color="text.secondary">
+          <Typography sx={{ mb: 6, textAlign: 'center' }} color="fg-2">
             <Trans>Please connect your wallet to be able to bridge your tokens.</Trans>
           </Typography>
           <ConnectWalletButton />
@@ -342,7 +379,7 @@ export const BridgeModalContent = () => {
       ) : (
         <>
           <Stack
-            sx={{ mb: 3 }}
+            sx={{ mb: '1rem' }}
             gap={3}
             direction="column"
             alignItems="center"
@@ -359,14 +396,14 @@ export const BridgeModalContent = () => {
               onClick={handleSwapNetworks}
               sx={{
                 border: '1px solid',
-                borderColor: 'divider',
+                borderColor: 'border-opaque',
                 position: 'absolute',
-                backgroundColor: 'background.paper',
+                backgroundColor: 'bg-2',
                 mt: -1,
-                '&:hover': { backgroundColor: 'background.surface' },
+                '&:hover': { backgroundColor: 'bg-3' },
               }}
             >
-              <SvgIcon sx={{ color: 'primary.main', fontSize: '18px' }}>
+              <SvgIcon sx={{ color: 'fg-3', fontSize: '18px' }}>
                 <SwitchVerticalIcon />
               </SvgIcon>
             </IconButton>
@@ -400,7 +437,7 @@ export const BridgeModalContent = () => {
             isMaxSelected={maxSelected}
           />
 
-          <Box sx={{ mt: 3 }}>
+          <Box sx={{ mt: '1rem' }}>
             <BridgeDestinationInput
               connectedAccount={user}
               onInputValid={(account) => {
@@ -410,7 +447,11 @@ export const BridgeModalContent = () => {
               sourceChainId={sourceNetworkObj.chainId}
             />
           </Box>
-          <TxModalDetails gasLimit={gasLimit} chainId={sourceNetworkObj.chainId}>
+          <TxModalDetails
+            gasLimit={gasLimit}
+            chainId={sourceNetworkObj.chainId}
+            showGasStation={showGasStation}
+          >
             <BridgeAmount
               amount={amount}
               maxAmountToBridgeFormatted={maxAmountToBridgeFormatted}
@@ -446,7 +487,7 @@ export const BridgeModalContent = () => {
                     sx={{ borderRadius: '4px' }}
                   />
                 ) : (
-                  <Typography variant="secondary14">{estimatedTimeToDestination}</Typography>
+                  <Typography variant="h5">{estimatedTimeToDestination}</Typography>
                 )}
               </Box>
             </Row>
@@ -460,26 +501,21 @@ export const BridgeModalContent = () => {
                     sx={{ borderRadius: '4px' }}
                   />
                 ) : (
-                  <Typography variant="secondary14">{estimatedTimeToDestination}</Typography>
+                  <Typography variant="h5">{estimatedTimeToDestination}</Typography>
                 )}
               </Box> */}
-            <Row /> {/* Spacer */}
             {feesExceedWalletBalance && (
-              <Warning severity="warning" sx={{ my: 0 }}>
-                <Typography variant="caption">
-                  <Trans>Fees exceed wallet balance</Trans>
-                </Typography>
-              </Warning>
+              <Alert severity="warning" sx={{ width: '100%', my: 0 }}>
+                <Trans>Fees exceed wallet balance</Trans>
+              </Alert>
             )}
           </TxModalDetails>
           {txError && <GasEstimationError txError={txError} />}
 
           {txErrorBridgeMessage && (
-            <Warning severity="error" sx={{ mt: 4 }} icon={false}>
-              <Typography variant="caption">
-                <Trans>Something went wrong fetching bridge message, please try again later.</Trans>
-              </Typography>
-            </Warning>
+            <Alert severity="error" data-size="small" sx={{ mb: 6, width: '100%', mt: 4 }}>
+              <Trans>Something went wrong fetching bridge message, please try again later.</Trans>
+            </Alert>
           )}
 
           <BridgeActions {...bridgeActionsProps} />

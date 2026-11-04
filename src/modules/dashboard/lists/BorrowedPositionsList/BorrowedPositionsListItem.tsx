@@ -3,43 +3,48 @@ import { ReserveIncentiveResponse } from '@aave/math-utils/dist/esm/formatters/i
 import { Trans } from '@lingui/macro';
 import { Box, Button, useMediaQuery, useTheme } from '@mui/material';
 import { IncentivesCard } from 'src/components/incentives/IncentivesCard';
+import { LIST_CARDS_BELOW } from 'src/components/lists/listBreakpoints';
 import { Row } from 'src/components/primitives/Row';
+import { useAppDataContext } from 'src/hooks/app-data-provider/useAppDataProvider';
 import { useAssetCaps } from 'src/hooks/useAssetCaps';
 import { useModalContext } from 'src/hooks/useModal';
 import { useRootStore } from 'src/store/root';
+import { mobileCardActionsSx } from 'src/utils/buttonStyles';
 import { DashboardReserve } from 'src/utils/dashboardSortUtils';
+import { assetCanBeBorrowedByUser } from 'src/utils/getMaxAmountAvailableToBorrow';
+import { displayGhoForMintableMarket } from 'src/utils/ghoUtilities';
 import { isFeatureEnabled } from 'src/utils/marketsAndNetworksConfig';
 import { showExternalIncentivesTooltip } from 'src/utils/utils';
 import { useShallow } from 'zustand/shallow';
 
-import { ListAPRColumn } from '../ListAPRColumn';
+import { ListAPRColumn, ListGhoAPRColumn } from '../ListAPRColumn';
 import { ListButtonsColumn } from '../ListButtonsColumn';
 import { ListItemWrapper } from '../ListItemWrapper';
 import { ListMobileItemWrapper } from '../ListMobileItemWrapper';
 import { ListValueColumn } from '../ListValueColumn';
 import { ListValueRow } from '../ListValueRow';
-import { BorrowedPositionsListItemWrapperProps } from './BorrowedPositionsListItemWrapper';
+
+export interface BorrowedPositionsListItem {
+  item: DashboardReserve;
+  disableEModeSwitch: boolean;
+}
 
 export const BorrowedPositionsListItem = ({
   item,
   disableEModeSwitch,
-}: BorrowedPositionsListItemWrapperProps) => {
+}: BorrowedPositionsListItem) => {
   const { borrowCap } = useAssetCaps();
   const [currentMarket, currentMarketData] = useRootStore(
     useShallow((state) => [state.currentMarket, state.currentMarketData])
   );
   const theme = useTheme();
-  const downToXSM = useMediaQuery(theme.breakpoints.down('xsm'));
+  const showCards = useMediaQuery(theme.breakpoints.down(LIST_CARDS_BELOW));
   const { openBorrow, openRepay, openDebtSwitch } = useModalContext();
+  const { user } = useAppDataContext();
 
   const reserve = item.reserve;
 
-  const disableBorrow =
-    !reserve.isActive ||
-    !reserve.borrowingEnabled ||
-    reserve.isFrozen ||
-    reserve.isPaused ||
-    borrowCap.isMaxed;
+  const disableBorrow = !assetCanBeBorrowedByUser(reserve, user) || borrowCap.isMaxed;
 
   const disableRepay = !reserve.isActive || reserve.isPaused;
 
@@ -63,6 +68,7 @@ export const BorrowedPositionsListItem = ({
     totalBorrowsUSD: item.variableBorrowsUSD,
     borrowAPY: Number(reserve.variableBorrowAPY),
     incentives: reserve.vIncentivesData,
+    variableDebtTokenAddress: reserve.variableDebtTokenAddress,
     onDetbSwitchClick: () => {
       openDebtSwitch(reserve.underlyingAsset);
     },
@@ -80,7 +86,7 @@ export const BorrowedPositionsListItem = ({
     },
   };
 
-  if (downToXSM) {
+  if (showCards) {
     return <BorrowedPositionsListItemMobile {...props} />;
   } else {
     return <BorrowedPositionsListItemDesktop {...props} />;
@@ -116,6 +122,11 @@ const BorrowedPositionsListItemDesktop = ({
 }: BorrowedPositionsListItemProps) => {
   const currentMarket = useRootStore((state) => state.currentMarket);
 
+  const isGho = displayGhoForMintableMarket({
+    symbol: reserve.symbol,
+    currentMarket,
+  });
+
   return (
     <ListItemWrapper
       symbol={reserve.symbol}
@@ -136,31 +147,43 @@ const BorrowedPositionsListItemDesktop = ({
     >
       <ListValueColumn symbol={reserve.symbol} value={totalBorrows} subValue={totalBorrowsUSD} />
 
-      <ListAPRColumn
-        value={borrowAPY}
-        market={currentMarket}
-        protocolAction={ProtocolAction.borrow}
-        address={variableDebtTokenAddress}
-        incentives={incentives}
-        symbol={reserve.symbol}
-      />
+      {isGho ? (
+        <ListGhoAPRColumn
+          value={borrowAPY}
+          market={currentMarket}
+          protocolAction={ProtocolAction.borrow}
+          address={variableDebtTokenAddress}
+          incentives={incentives}
+          symbol={reserve.symbol}
+        />
+      ) : (
+        <ListAPRColumn
+          value={borrowAPY}
+          market={currentMarket}
+          protocolAction={ProtocolAction.borrow}
+          address={variableDebtTokenAddress}
+          incentives={incentives}
+          symbol={reserve.symbol}
+        />
+      )}
 
       <ListButtonsColumn>
         {showSwitchButton ? (
           <Button
+            size="small"
             disabled={disableSwitch}
             variant="contained"
             onClick={onDetbSwitchClick}
             data-cy={`swapButton`}
           >
-            <Trans>Switch</Trans>
+            <Trans>Swap</Trans>
           </Button>
         ) : (
-          <Button disabled={disableBorrow} variant="contained" onClick={onOpenBorrow}>
+          <Button disabled={disableBorrow} variant="contained" onClick={onOpenBorrow} size="small">
             <Trans>Borrow</Trans>
           </Button>
         )}
-        <Button disabled={disableRepay} variant="outlined" onClick={onOpenRepay}>
+        <Button disabled={disableRepay} variant="tertiary" onClick={onOpenRepay} size="small">
           <Trans>Repay</Trans>
         </Button>
       </ListButtonsColumn>
@@ -216,13 +239,13 @@ const BorrowedPositionsListItemMobile = ({
           incentives={incentives}
           address={variableDebtTokenAddress}
           symbol={symbol}
-          variant="secondary14"
+          variant="h5"
           market={currentMarket}
           protocolAction={ProtocolAction.borrow}
         />
       </Row>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 5 }}>
+      <Box sx={mobileCardActionsSx}>
         {showSwitchButton ? (
           <Button
             disabled={disableSwitch}
@@ -231,20 +254,14 @@ const BorrowedPositionsListItemMobile = ({
             onClick={onDetbSwitchClick}
             data-cy={`swapButton`}
           >
-            <Trans>Switch</Trans>
+            <Trans>Swap</Trans>
           </Button>
         ) : (
           <Button disabled={disableBorrow} variant="contained" onClick={onOpenBorrow} fullWidth>
             <Trans>Borrow</Trans>
           </Button>
         )}
-        <Button
-          disabled={disableRepay}
-          variant="outlined"
-          onClick={onOpenRepay}
-          sx={{ ml: 1.5 }}
-          fullWidth
-        >
+        <Button disabled={disableRepay} variant="tertiary" onClick={onOpenRepay} fullWidth>
           <Trans>Repay</Trans>
         </Button>
       </Box>

@@ -1,13 +1,14 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
 import { configEnvWithTenderlyGnosisFork } from '../../../../support/steps/configuration.steps';
 import { borrow, repay, supply, withdraw } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
-  axDAIGnosisV3: 9000,
+  axDAIGnosisV3: 1000,
 };
 
 const testData = {
@@ -71,7 +72,6 @@ const testData = {
 describe('USDC INTEGRATION SPEC, GNOSIS V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyGnosisFork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

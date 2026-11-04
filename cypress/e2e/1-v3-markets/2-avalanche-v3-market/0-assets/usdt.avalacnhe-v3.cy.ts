@@ -1,3 +1,5 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
@@ -13,7 +15,6 @@ import {
   dashboardAssetValuesVerification,
   switchCollateralBlocked,
 } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aAVAXAvalancheV3: 9000,
@@ -57,7 +58,7 @@ const testData = {
     repayCollateral: {
       asset: assets.avalancheV3Market.USDT,
       apyType: constants.apyType.stable,
-      amount: 2,
+      amount: 4,
       hasApproval: false,
       repayOption: constants.repayType.default,
     },
@@ -69,13 +70,6 @@ const testData = {
         amount: 2,
         hasApproval: true,
         repayOption: constants.repayType.default,
-      },
-      {
-        asset: assets.avalancheV3Market.USDT,
-        apyType: constants.apyType.stable,
-        amount: 2,
-        hasApproval: false,
-        repayOption: constants.repayType.collateral,
       },
     ],
     withdraw: {
@@ -112,7 +106,6 @@ describe.skip('USDT INTEGRATION SPEC, AVALANCHE V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyAvalancheFork({
     market: 'fork_proto_avalanche_v3',
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

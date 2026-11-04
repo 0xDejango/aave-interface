@@ -1,4 +1,5 @@
 import { gasLimitRecommendations, InterestRate, ProtocolAction } from '@aave/contract-helpers';
+import { valueToBigNumber } from '@aave/math-utils';
 import { TransactionResponse } from '@ethersproject/providers';
 import { Trans } from '@lingui/macro';
 import { BoxProps } from '@mui/material';
@@ -17,7 +18,8 @@ import { queryKeysFactory } from 'src/ui-config/queries';
 import { useShallow } from 'zustand/shallow';
 
 import { TxActionsWrapper } from '../TxActionsWrapper';
-import { APPROVAL_GAS_LIMIT, checkRequiresApproval } from '../utils';
+import { APPROVAL_GAS_LIMIT, checkRequiresApproval, getRepayAmountToApprove } from '../utils';
+import { RepayAllowance, RepayAllowanceControl } from './RepayAllowanceControl';
 
 export interface RepayActionProps extends BoxProps {
   amountToRepay: string;
@@ -29,6 +31,9 @@ export interface RepayActionProps extends BoxProps {
   repayWithATokens: boolean;
   blocked?: boolean;
   maxApproveNeeded: string;
+  setShowUSDTResetWarning?: (showUSDTResetWarning: boolean) => void;
+  chainId?: number;
+  maxAmountToRepay: string;
 }
 
 export const RepayActions = ({
@@ -41,6 +46,9 @@ export const RepayActions = ({
   repayWithATokens,
   blocked,
   maxApproveNeeded,
+  setShowUSDTResetWarning,
+  chainId,
+  maxAmountToRepay,
   ...props
 }: RepayActionProps) => {
   const [
@@ -71,6 +79,7 @@ export const RepayActions = ({
   const { sendTx } = useWeb3Context();
   const queryClient = useQueryClient();
   const [signatureParams, setSignatureParams] = useState<SignedParams | undefined>();
+  const [allowance, setAllowance] = useState(RepayAllowance.UNLIMITED);
   const {
     approvalTxState,
     mainTxState,
@@ -97,14 +106,28 @@ export const RepayActions = ({
 
   setLoadingTxns(fetchingApprovedAmount);
 
+  // Single source for what the approval has to cover: the gate below and the approval we
+  // build must never disagree, or a successful approval gets rejected on the next render.
+  const amountRequiringApproval = Number(amountToRepay) === -1 ? maxApproveNeeded : amountToRepay;
+
   const requiresApproval =
     !repayWithATokens &&
     Number(amountToRepay) !== 0 &&
     checkRequiresApproval({
       approvedAmount: approvedAmount?.amount || '0',
-      amount: Number(amountToRepay) === -1 ? maxApproveNeeded : amountToRepay,
+      amount: amountRequiringApproval,
       signedAmount: signatureParams ? signatureParams.amount : '0',
     });
+
+  const amountToApprove = getRepayAmountToApprove({
+    amountRequiringApproval,
+    isMaxRepay: Number(amountToRepay) === -1,
+    decimals: poolReserve.decimals,
+  });
+
+  // Permit already signs for an exact amount, so the choice only applies to approve().
+  const canChooseAllowance = !repayWithATokens && !usePermit && Number(amountToRepay) !== 0;
+  const approveExactAmount = canChooseAllowance && allowance === RepayAllowance.EXACT;
 
   if (requiresApproval && approvalTxState?.success) {
     // There was a successful approval tx, but the approval amount is not enough.
@@ -112,7 +135,7 @@ export const RepayActions = ({
     setApprovalTxState({});
   }
 
-  const { approval } = useApprovalTx({
+  const { approval, requiresApprovalReset } = useApprovalTx({
     usePermit,
     approvedAmount,
     requiresApproval,
@@ -120,8 +143,13 @@ export const RepayActions = ({
     symbol,
     decimals: poolReserve.decimals,
     signatureAmount: amountToRepay,
+    amountToApprove: approveExactAmount
+      ? parseUnits(amountToApprove, poolReserve.decimals).toString()
+      : undefined,
     onApprovalTxConfirmed: fetchApprovedAmount,
     onSignTxCompleted: (signedParams) => setSignatureParams(signedParams),
+    chainId,
+    setShowUSDTResetWarning,
   });
 
   useEffect(() => {
@@ -197,8 +225,11 @@ export const RepayActions = ({
         action,
         txState: 'success',
         asset: poolAddress,
-        amount: amountToRepay,
+        amount: amountToRepay === '-1' ? maxAmountToRepay : amountToRepay,
         assetName: symbol,
+        amountUsd: valueToBigNumber(amountToRepay === '-1' ? maxAmountToRepay : amountToRepay)
+          .multipliedBy(poolReserve.priceInUSD)
+          .toString(),
       });
 
       queryClient.invalidateQueries({ queryKey: queryKeysFactory.pool });
@@ -244,6 +275,17 @@ export const RepayActions = ({
       actionText={<Trans>Repay {symbol}</Trans>}
       actionInProgressText={<Trans>Repaying {symbol}</Trans>}
       tryPermit={permitAvailable}
+      approvalOptions={
+        canChooseAllowance ? (
+          <RepayAllowanceControl
+            allowance={allowance}
+            setAllowance={setAllowance}
+            exactAmount={amountToApprove}
+            symbol={symbol}
+          />
+        ) : undefined
+      }
+      requiresApprovalReset={requiresApprovalReset}
     />
   );
 };

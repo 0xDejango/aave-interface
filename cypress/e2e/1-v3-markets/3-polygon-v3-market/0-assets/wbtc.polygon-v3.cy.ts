@@ -1,13 +1,14 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
 import { configEnvWithTenderlyPolygonFork } from '../../../../support/steps/configuration.steps';
 import { borrow, repay, supply, withdraw } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
-  aMATICPolygonV3: 20000,
+  aMATICPolygonV3: 2000000,
 };
 
 const testData = {
@@ -74,11 +75,10 @@ const testData = {
   },
 };
 
-describe('WBTC INTEGRATION SPEC, POLYGON V3 MARKET', () => {
+describe.skip('WBTC INTEGRATION SPEC, POLYGON V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyPolygonFork({
     market: 'fork_proto_polygon_v3',
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

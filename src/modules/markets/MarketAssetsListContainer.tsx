@@ -1,21 +1,32 @@
 import { API_ETH_MOCK_ADDRESS } from '@aave/contract-helpers';
 import { Trans } from '@lingui/macro';
-import { Box, Switch, Typography, useMediaQuery, useTheme } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Divider,
+  FormControlLabel,
+  Paper,
+  Switch,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material';
 import { useState } from 'react';
-import { ListWrapper } from 'src/components/lists/ListWrapper';
+import { AssetsFilterBar } from 'src/components/AssetsFilterBar';
+import { CONTENT_TOP_PADDING } from 'src/components/ContentContainer';
 import { NoSearchResults } from 'src/components/NoSearchResults';
 import { Link } from 'src/components/primitives/Link';
-import { Warning } from 'src/components/primitives/Warning';
-import { TitleWithSearchBar } from 'src/components/TitleWithSearchBar';
-import { useAppDataContext } from 'src/hooks/app-data-provider/useAppDataProvider';
+import { ReserveWithId, useAppDataContext } from 'src/hooks/app-data-provider/useAppDataProvider';
+import { usePoolTokensBalance } from 'src/hooks/pool/usePoolTokensBalance';
+import { useCoingeckoCategories } from 'src/hooks/useCoinGeckoCategories';
 import MarketAssetsList from 'src/modules/markets/MarketAssetsList';
 import { useRootStore } from 'src/store/root';
-import { fetchIconSymbolAndName } from 'src/ui-config/reservePatches';
-import { getGhoReserve, GHO_MINTING_MARKETS, GHO_SYMBOL } from 'src/utils/ghoUtilities';
+import { GHO_MINTING_MARKETS, GHO_SYMBOL } from 'src/utils/ghoUtilities';
 import { useShallow } from 'zustand/shallow';
 
 import { GENERAL } from '../../utils/events';
-import { GhoBanner } from './Gho/GhoBanner';
+import { isAssetHidden } from '../dashboard/lists/constants';
+import { SavingsGhoBanner } from './Gho/GhoBanner';
+import { AssetCategory, matchesSelectedCategories } from './utils/assetCategories';
 
 function shouldDisplayGhoBanner(marketTitle: string, searchTerm: string): boolean {
   // GHO banner is only displayed on markets where new GHO is mintable (i.e. Ethereum)
@@ -35,51 +46,106 @@ function shouldDisplayGhoBanner(marketTitle: string, searchTerm: string): boolea
 }
 
 export const MarketAssetsListContainer = () => {
-  const { reserves, loading } = useAppDataContext();
-  const [trackEvent, currentMarket, currentMarketData, currentNetworkConfig] = useRootStore(
-    useShallow((store) => [
-      store.trackEvent,
-      store.currentMarket,
-      store.currentMarketData,
-      store.currentNetworkConfig,
-    ])
-  );
+  const { data, isLoading, error } = useCoingeckoCategories();
+
+  const { supplyReserves, loading } = useAppDataContext();
+
+  const [trackEvent, account, currentMarket, currentMarketData, currentNetworkConfig] =
+    useRootStore(
+      useShallow((store) => [
+        store.trackEvent,
+        store.account,
+        store.currentMarket,
+        store.currentMarketData,
+        store.currentNetworkConfig,
+      ])
+    );
+  const { data: tokenBalances } = usePoolTokensBalance(currentMarketData);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<AssetCategory[]>([]);
+  const [inWalletOnly, setInWalletOnly] = useState(false);
+
   const { breakpoints } = useTheme();
+
   const sm = useMediaQuery(breakpoints.down('sm'));
 
-  const ghoReserve = getGhoReserve(reserves);
   const displayGhoBanner = shouldDisplayGhoBanner(currentMarket, searchTerm);
 
-  const filteredData = reserves
-    // Filter out any non-active reserves
-    .filter((res) => res.isActive)
-    // Filter out GHO if the banner is being displayed
-    .filter((res) => (displayGhoBanner ? res !== ghoReserve : true))
+  const [showLowLiquidityToggle, setShowLowLiquidityToggle] = useState(false);
+
+  const heldAddresses = new Set(
+    (tokenBalances ?? []).filter((b) => b.amount !== '0').map((b) => b.address)
+  );
+
+  // Native-asset reserves hold their balance under the mock ETH address, not their own.
+  const heldInWallet = (res: ReserveWithId) =>
+    heldAddresses.has(res.underlyingToken.address.toLowerCase()) ||
+    (!!res.acceptsNative && heldAddresses.has(API_ETH_MOCK_ADDRESS.toLowerCase()));
+
+  // Keyed off the same condition that renders the toggle, so disconnecting can't strand the filter.
+  const inWalletActive = !!account && inWalletOnly;
+
+  const baseFilteredData = supplyReserves
+    // Filter out any hidden assets
+    .filter((res) => !isAssetHidden(currentMarketData.market, res.underlyingToken.address))
     // filter out any that don't meet search term criteria
     .filter((res) => {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase().trim();
       return (
-        res.symbol.toLowerCase().includes(term) ||
-        res.name.toLowerCase().includes(term) ||
-        res.underlyingAsset.toLowerCase().includes(term)
+        res.underlyingToken.symbol.toLowerCase().includes(term) ||
+        res.underlyingToken.name.toLowerCase().includes(term) ||
+        res.underlyingToken.address.toLowerCase().includes(term)
       );
+    })
+    // "In Wallet": only assets the user holds
+    .filter((res) => !inWalletActive || heldInWallet(res))
+    // Category filter (shared with the dashboard / staking asset lists)
+    .filter((res) =>
+      matchesSelectedCategories(
+        res.underlyingToken.symbol,
+        selectedCategories,
+        data?.stablecoinSymbols,
+        data?.ethCorrelatedSymbols
+      )
+    );
+
+  // If every remaining asset is below the $100k supply threshold, showing the
+  // low-liquidity filter would leave the list empty, so show all assets instead.
+  const hasHighLiquidityAssets = baseFilteredData.some((res) => Number(res.size.usd) >= 100_000);
+
+  const filteredData = baseFilteredData
+    // Filter out low-liquidity assets (<$100k supply) unless toggle is enabled
+    // (or unless all assets would otherwise be filtered out)
+    .filter(
+      (res) => showLowLiquidityToggle || !hasHighLiquidityAssets || Number(res.size.usd) >= 100_000
+    )
+    // Add initial sorting by total supplied in USD descending
+    .sort((a, b) => {
+      const aValue = Number(a.size.usd) || 0;
+      const bValue = Number(b.size.usd) || 0;
+      return bValue - aValue;
     })
     // Transform the object for list to consume it
     .map((reserve) => ({
       ...reserve,
-      ...(reserve.isWrappedBaseAsset
-        ? fetchIconSymbolAndName({
-            symbol: currentNetworkConfig.baseAssetSymbol,
-            underlyingAsset: API_ETH_MOCK_ADDRESS.toLowerCase(),
-          })
+      ...(reserve.acceptsNative
+        ? {
+            underlyingToken: {
+              ...reserve.underlyingToken,
+              name: currentNetworkConfig.baseAssetSymbol, // e.g., "Ethereum"
+              symbol: currentNetworkConfig.baseAssetSymbol, // e.g., "ETH"
+              imageUrl: currentNetworkConfig.baseAssetSymbol.toLowerCase(), // This might need adjustment based on your icon system
+            },
+          }
         : {}),
     }));
+
   // const marketFrozen = !reserves.some((reserve) => !reserve.isFrozen);
   // const showFrozenMarketWarning =
   //   marketFrozen && ['Fantom', 'Ethereum AMM'].includes(currentMarketData.marketTitle);
   const unfrozenReserves = filteredData.filter((r) => !r.isFrozen && !r.isPaused);
+
   const [showFrozenMarketsToggle, setShowFrozenMarketsToggle] = useState(false);
 
   const handleChange = () => {
@@ -89,80 +155,100 @@ export const MarketAssetsListContainer = () => {
   const frozenOrPausedReserves = filteredData.filter((r) => r.isFrozen || r.isPaused);
 
   return (
-    <ListWrapper
-      titleComponent={
-        <TitleWithSearchBar
-          onSearchTermChange={setSearchTerm}
-          title={
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: CONTENT_TOP_PADDING }}>
+      {displayGhoBanner && <SavingsGhoBanner />}
+
+      <AssetsFilterBar
+        searchPlaceholder={sm ? 'Search asset' : 'Search asset name, symbol, or address'}
+        onSearchTermChange={setSearchTerm}
+        inWallet={account ? { value: inWalletOnly, onChange: setInWalletOnly } : undefined}
+        selectedCategories={selectedCategories}
+        onCategoriesChange={setSelectedCategories}
+        categoriesDisabled={isLoading || !!error}
+      />
+
+      <Paper variant="table">
+        {/* Unfrozen assets list */}
+        <MarketAssetsList reserves={unfrozenReserves} loading={loading} />
+
+        {showFrozenMarketsToggle && frozenOrPausedReserves.length > 0 && (
+          <>
+            <Box sx={{ mt: 10, px: { xs: 4, xsm: 6 } }}>
+              <Alert severity="info" sx={{ mb: 6, width: '100%' }}>
+                <Trans>
+                  These assets are temporarily frozen or paused by Aave community decisions, meaning
+                  that further supply / borrow, or rate swap of these assets are unavailable.
+                  Withdrawals and debt repayments are allowed. Follow the{' '}
+                  <Link
+                    onClick={() => {
+                      trackEvent(GENERAL.EXTERNAL_LINK, {
+                        link: 'Frozen Market Markets Page',
+                        frozenMarket: currentNetworkConfig.name,
+                      });
+                    }}
+                    href="https://governance.aave.com"
+                    underline="always"
+                  >
+                    Aave governance forum
+                  </Link>{' '}
+                  for further updates.
+                </Trans>
+              </Alert>
+            </Box>
+            <MarketAssetsList reserves={frozenOrPausedReserves} loading={loading} />
+          </>
+        )}
+
+        {/* Show no search results message if nothing hits in either list */}
+        {!loading && filteredData.length === 0 && !displayGhoBanner && (
+          <NoSearchResults
+            searchTerm={searchTerm}
+            subtitle={<Trans>We couldn&apos;t find any assets related to your search.</Trans>}
+          />
+        )}
+
+        <Box
+          sx={{
+            px: { xs: 4, xsm: 6 },
+            height: { sm: '40px' },
+            py: { xs: 3, sm: 0 },
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            gap: { xs: '1rem', sm: '0.75rem' },
+          }}
+        >
+          {frozenOrPausedReserves.length > 0 && (
             <>
-              {currentMarketData.marketTitle} <Trans>assets</Trans>
+              <FormControlLabel
+                sx={{ m: 0 }}
+                control={
+                  <Switch
+                    checked={showFrozenMarketsToggle}
+                    onChange={handleChange}
+                    inputProps={{ 'aria-label': 'show frozen or paused assets' }}
+                  />
+                }
+                label={<Trans>Show frozen/paused assets</Trans>}
+                componentsProps={{ typography: { variant: 'subheader1' } }}
+              />
+              {!sm && <Divider orientation="vertical" sx={{ height: '1.25rem' }} />}
             </>
-          }
-          searchPlaceholder={sm ? 'Search asset' : 'Search asset name, symbol, or address'}
-        />
-      }
-    >
-      {displayGhoBanner && (
-        <Box mb={4}>
-          <GhoBanner reserve={ghoReserve} />
-        </Box>
-      )}
-
-      {/* Unfrozen assets list */}
-      <MarketAssetsList reserves={unfrozenReserves} loading={loading} />
-
-      {/* Frozen or paused assets list */}
-      {frozenOrPausedReserves.length > 0 && (
-        <Box sx={{ mt: 10, px: { xs: 4, xsm: 6 } }}>
-          <Typography variant="h4" mb={4}>
-            <Trans>Show Frozen or paused assets</Trans>
-
-            <Switch
-              checked={showFrozenMarketsToggle}
-              onChange={handleChange}
-              inputProps={{ 'aria-label': 'controlled' }}
-            />
-          </Typography>
-          {showFrozenMarketsToggle && (
-            <Warning severity="info">
-              <Trans>
-                These assets are temporarily frozen or paused by Aave community decisions, meaning
-                that further supply / borrow, or rate swap of these assets are unavailable.
-                Withdrawals and debt repayments are allowed. Follow the{' '}
-                <Link
-                  onClick={() => {
-                    trackEvent(GENERAL.EXTERNAL_LINK, {
-                      link: 'Frozen Market Markets Page',
-                      frozenMarket: currentNetworkConfig.name,
-                    });
-                  }}
-                  href="https://governance.aave.com"
-                  underline="always"
-                >
-                  Aave governance forum
-                </Link>{' '}
-                for further updates.
-              </Trans>
-            </Warning>
           )}
+          <FormControlLabel
+            sx={{ m: 0 }}
+            control={
+              <Switch
+                checked={showLowLiquidityToggle || !hasHighLiquidityAssets}
+                onChange={() => setShowLowLiquidityToggle((prev) => !prev)}
+                inputProps={{ 'aria-label': 'show assets under 100k supply' }}
+              />
+            }
+            label={<Trans>{'Show assets <$100k supply'}</Trans>}
+            componentsProps={{ typography: { variant: 'subheader1' } }}
+          />
         </Box>
-      )}
-      {showFrozenMarketsToggle && (
-        <MarketAssetsList reserves={frozenOrPausedReserves} loading={loading} />
-      )}
-
-      {/* Show no search results message if nothing hits in either list */}
-      {!loading && filteredData.length === 0 && !displayGhoBanner && (
-        <NoSearchResults
-          searchTerm={searchTerm}
-          subtitle={
-            <Trans>
-              We couldn&apos;t find any assets related to your search. Try again with a different
-              asset name, symbol, or address.
-            </Trans>
-          }
-        />
-      )}
-    </ListWrapper>
+      </Paper>
+    </Box>
   );
 };

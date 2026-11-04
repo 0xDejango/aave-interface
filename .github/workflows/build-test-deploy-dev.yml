@@ -8,6 +8,10 @@ on:
   pull_request:
     branches: ['main']
 
+# Default least-privilege token; jobs that comment on PRs elevate below.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,7 +27,7 @@ jobs:
           - name: 'out_cypress'
             cypress_enabled: 'true'
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
 
@@ -37,34 +41,13 @@ jobs:
           NEXT_PUBLIC_MIXPANEL: ${{ secrets.NEXT_PUBLIC_MIXPANEL }}
           NEXT_PUBLIC_FIAT_ON_RAMP: 'false'
           NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: ${{ secrets.WALLET_CONNECT_PROJECT_ID }}
-          NEXT_PUBLIC_SUBGRAPH_API_KEY: ${{ secrets.NEXT_PUBLIC_SUBGRAPH_API_KEY }}
           NEXT_PUBLIC_IS_CYPRESS_ENABLED: ${{ matrix.build.cypress_enabled }}
+          NEXT_PUBLIC_FUNKIT_API_KEY: ${{ secrets.FUNKIT_API_KEY }}
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
         with:
           BUILD_ARTIFACT_NAME: ${{ matrix.build.name }}
-
-  cypress_smoke_v2:
-    runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip cypress]')"
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        market:
-          - polygon
-          - avalanche
-    steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
-
-      - name: Run tests
-        uses: ./.github/actions/cypress
-        with:
-          CYPRESS_TENDERLY_ACCOUNT: ${{ secrets.TENDERLY_ACCOUNT }}
-          CYPRESS_TENDERLY_KEY: ${{ secrets.TENDERLY_KEY }}
-          CYPRESS_TENDERLY_PROJECT: ${{ secrets.TENDERLY_PROJECT }}
-          YARN_TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/v2-markets/${{ matrix.market }}-v2-smoke.config.ts
 
   cypress_smoke_v3:
     runs-on: ubuntu-latest
@@ -79,11 +62,10 @@ jobs:
           - optimism
           - ethereum
           - base
-          - gho
           - gnosis
           - bnb
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Run tests
         uses: ./.github/actions/cypress
@@ -91,13 +73,16 @@ jobs:
           CYPRESS_TENDERLY_ACCOUNT: ${{ secrets.TENDERLY_ACCOUNT }}
           CYPRESS_TENDERLY_KEY: ${{ secrets.TENDERLY_KEY }}
           CYPRESS_TENDERLY_PROJECT: ${{ secrets.TENDERLY_PROJECT }}
-          YARN_TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/v3-markets/${{ matrix.market }}-v3-smoke.config.ts
+          TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/v3-markets/${{ matrix.market }}-v3-smoke.config.ts
 
   next_js_analyze:
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
+      pull-requests: write # posts bundle-analysis comment on the PR
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: download build
         uses: actions/download-artifact@v4
@@ -114,8 +99,11 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+    permissions:
+      contents: read
+      pull-requests: write # pinata-action comments the IPFS hash on the PR
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: download build
         uses: actions/download-artifact@v4
@@ -133,45 +121,11 @@ jobs:
           BUILD_LOCATION: './out'
           CID_VERSION: 1
 
-      - name: Pin to primary IPFS server
-        id: ipfs-primary
-        uses: ./.github/actions/ipfs-pin
-        with:
-          IPFS_SERVER_PORT: '${{ secrets.IPFS_PRIMARY_SERVER_PORT }}'
-          IPFS_SERVER: '${{ secrets.IPFS_PRIMARY_SERVER }}'
-          IPFS_SERVER_KEY: '${{ secrets.IPFS_PRIMARY_SERVER_KEY }}'
-          BUILD_PATH: 'out'
-
-  cypress_full_v2:
-    runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip cypress]')"
-    needs:
-      - deploy
-      - cypress_smoke_v2
-      - cypress_smoke_v3
-    strategy:
-      fail-fast: false
-      matrix:
-        market:
-          - polygon
-          - avalanche
-    steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
-
-      - name: Run tests
-        uses: ./.github/actions/cypress
-        with:
-          CYPRESS_TENDERLY_ACCOUNT: ${{ secrets.TENDERLY_ACCOUNT }}
-          CYPRESS_TENDERLY_KEY: ${{ secrets.TENDERLY_KEY }}
-          CYPRESS_TENDERLY_PROJECT: ${{ secrets.TENDERLY_PROJECT }}
-          YARN_TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/v2-markets/${{ matrix.market }}-v2-full.config.ts
-
   cypress_full_v3:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip cypress]')"
     needs:
       - deploy
-      - cypress_smoke_v2
       - cypress_smoke_v3
     strategy:
       fail-fast: false
@@ -180,10 +134,9 @@ jobs:
           - polygon
           - optimism
           - ethereum
-          - gho
           - base
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Run tests
         uses: ./.github/actions/cypress
@@ -191,26 +144,24 @@ jobs:
           CYPRESS_TENDERLY_ACCOUNT: ${{ secrets.TENDERLY_ACCOUNT }}
           CYPRESS_TENDERLY_KEY: ${{ secrets.TENDERLY_KEY }}
           CYPRESS_TENDERLY_PROJECT: ${{ secrets.TENDERLY_PROJECT }}
-          YARN_TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/v3-markets/${{ matrix.market }}-v3-full.config.ts
+          TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/v3-markets/${{ matrix.market }}-v3-full.config.ts
 
   cypress_app_functionality:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip cypress]')"
     needs:
       - deploy
-      - cypress_smoke_v2
       - cypress_smoke_v3
     strategy:
       fail-fast: false
       matrix:
         scoupe:
           - settings
-          - mobile
           - governance-stake
           - widgets
           - general
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Run tests
         uses: ./.github/actions/cypress
@@ -218,4 +169,4 @@ jobs:
           CYPRESS_TENDERLY_ACCOUNT: ${{ secrets.TENDERLY_ACCOUNT }}
           CYPRESS_TENDERLY_KEY: ${{ secrets.TENDERLY_KEY }}
           CYPRESS_TENDERLY_PROJECT: ${{ secrets.TENDERLY_PROJECT }}
-          YARN_TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/${{ matrix.scoupe }}.config.ts
+          TEST_COMMAND: npx cypress-repeat run -n 2 --rerun-failed-only --config-file ./cypress/configs/${{ matrix.scoupe }}.config.ts

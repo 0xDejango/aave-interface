@@ -1,576 +1,428 @@
 import { ArrowNarrowRightIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
-import { Box, SvgIcon, Typography } from '@mui/material';
+import { Alert, Box, SvgIcon, Typography } from '@mui/material';
 import { formatUnits } from 'ethers/lib/utils';
-import React from 'react';
+import {
+  StatusCancelledIcon,
+  StatusExpiredIcon,
+  StatusFilledIcon,
+  StatusInProgressIcon,
+} from 'src/components/icons/StatusIcons';
 import { DarkTooltip } from 'src/components/infoTooltips/DarkTooltip';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
 import { TokenIcon } from 'src/components/primitives/TokenIcon';
+import {
+  isOrderCancelled,
+  isOrderExpired,
+  isOrderFilled,
+  isOrderLoading,
+} from 'src/components/transactions/Swap/helpers/cow';
+import { swapTypesThatRequiresInvertedQuote } from 'src/components/transactions/Swap/hooks/useSwapQuote';
 
-import { BorrowRateModeBlock } from '../actions/BorrowRateModeBlock';
-import { fetchIconSymbolAndNameHistorical } from '../helpers';
-import { PriceUnavailable } from '../PriceUnavailable';
-import { ActionFields, TransactionHistoryItem } from '../types';
+import {
+  ActionName,
+  CowSwapSubset,
+  hasAmount,
+  hasCollateralReserve,
+  hasSrcOrDestToken,
+  isSDKTransaction,
+  TransactionHistoryItem,
+  transactionHistoryItemTypeToSwapType,
+  TransactionHistoryItemUnion,
+} from '../types';
 
-export const ActionTextMap = ({ action }: { action: string }) => {
+interface ActionDetailsProps {
+  transaction: TransactionHistoryItemUnion;
+  iconSize?: string;
+}
+
+// The tokens hug the arrow between them; the status badge keeps a wider gap from the pair.
+const BADGE_SX = { ml: 4.5 };
+
+export const ActionTextMap = ({ action }: { action: ActionName }) => {
   switch (action) {
-    case 'Supply':
-    case 'Deposit':
+    // SDK transactions
+    case ActionName.UserSupplyTransaction:
       return <Trans>Supply</Trans>;
-    case 'Borrow':
-      return <Trans>Borrow</Trans>;
-    case 'RedeemUnderlying':
+    case ActionName.UserWithdrawTransaction:
       return <Trans>Withdraw</Trans>;
-    case 'Repay':
+    case ActionName.UserBorrowTransaction:
+      return <Trans>Borrow</Trans>;
+    case ActionName.UserRepayTransaction:
       return <Trans>Repay</Trans>;
-    case 'UsageAsCollateral':
+    case ActionName.UserUsageAsCollateralTransaction:
       return <Trans>Collateral usage</Trans>;
-    case 'SwapBorrowRate':
-    case 'Swap':
-      return <Trans>Borrow rate change</Trans>;
-    case 'LiquidationCall':
+    case ActionName.UserLiquidationCallTransaction:
       return <Trans>Liquidation</Trans>;
+
+    // Swap transactions
+    case ActionName.Swap:
+      return <Trans>Swap</Trans>;
+    case ActionName.CollateralSwap:
+      return <Trans>Collateral Swap</Trans>;
+    case ActionName.DebtSwap:
+      return <Trans>Debt Swap</Trans>;
+    case ActionName.RepayWithCollateral:
+      return <Trans>Repay with Collateral</Trans>;
+    case ActionName.WithdrawAndSwap:
+      return <Trans>Withdraw and Swap</Trans>;
+
     default:
-      return <></>;
+      return <Trans>Unknown</Trans>;
   }
 };
 
-export const ActionDetails = <K extends keyof ActionFields>({
-  transaction,
-  iconSize,
-}: {
-  transaction: TransactionHistoryItem<ActionFields[K]>;
-  iconSize: string;
-}) => {
-  switch (transaction.action) {
-    case 'Supply':
-    case 'Deposit':
-      const supplyTx = transaction as TransactionHistoryItem<ActionFields['Supply']>;
-      const formattedSupplyReserve = fetchIconSymbolAndNameHistorical(supplyTx.reserve);
-      const formattedSupplyAmount = formatUnits(supplyTx.amount, supplyTx.reserve.decimals);
-      return (
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <TokenIcon symbol={formattedSupplyReserve.iconSymbol} sx={{ fontSize: iconSize }} />
-          <Typography
-            variant="secondary14"
-            color="text.primary"
-            sx={{ ml: formattedSupplyReserve.iconSymbol.split('_').length > 1 ? 3 : 1, mb: 0.5 }}
-          >
-            +
-          </Typography>
-          <DarkTooltip
-            wrap
-            title={
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <PriceUnavailable
-                  value={Number(supplyTx.assetPriceUSD) * Number(formattedSupplyAmount)}
-                />
-                <Box sx={{ display: 'flex' }}>
-                  <FormattedNumber
-                    value={formattedSupplyAmount}
-                    variant="secondary14"
-                    color="common.white"
-                    sx={{ mr: 1 }}
-                  />
-                  <Typography variant="secondary14" color="common.white">
-                    {formattedSupplyReserve.symbol}
-                  </Typography>
-                </Box>
-              </Box>
-            }
-            arrow
-            placement="top"
-          >
-            <Box>
-              <FormattedNumber
-                value={formattedSupplyAmount}
-                variant="secondary14"
-                color="text.primary"
-                compact
-                compactThreshold={100000}
-                sx={{ mr: 1 }}
-              />
-            </Box>
-          </DarkTooltip>
-          <DarkTooltip
-            title={
-              <Typography variant="secondary14" color="common.white">
-                {formattedSupplyReserve.name} ({formattedSupplyReserve.symbol})
-              </Typography>
-            }
-            arrow
-            placement="top"
-          >
-            <Typography variant="secondary14" color="text.primary">
-              {formattedSupplyReserve.symbol}
-            </Typography>
-          </DarkTooltip>
-        </Box>
-      );
-    case 'Borrow':
-      const borrowTx = transaction as TransactionHistoryItem<ActionFields['Borrow']>;
-      const formattedBorrowReserve = fetchIconSymbolAndNameHistorical(borrowTx.reserve);
-      const formattedBorrowAmount = formatUnits(borrowTx.amount, borrowTx.reserve.decimals);
-      return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-          <TokenIcon symbol={formattedBorrowReserve.iconSymbol} sx={{ fontSIze: iconSize }} />
-          <Typography
-            variant="secondary14"
-            color="text.primary"
-            sx={{ ml: formattedBorrowReserve.iconSymbol.split('_').length > 1 ? 3 : 1, mb: 0.5 }}
-          >
-            &minus;
-          </Typography>
-          <DarkTooltip
-            wrap
-            title={
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <PriceUnavailable
-                  value={Number(borrowTx.assetPriceUSD) * Number(formattedBorrowAmount)}
-                />
-                <Box sx={{ display: 'flex' }}>
-                  <FormattedNumber
-                    value={formattedBorrowAmount}
-                    variant="secondary14"
-                    color="common.white"
-                    sx={{ mr: 1 }}
-                  />
-                  <Typography variant="secondary14" color="common.white">
-                    {formattedBorrowReserve.symbol}
-                  </Typography>
-                </Box>
-              </Box>
-            }
-            arrow
-            placement="top"
-          >
-            <Box>
-              <FormattedNumber
-                value={formattedBorrowAmount}
-                variant="secondary14"
-                color="text.primary"
-                sx={{ mr: 1 }}
-                compact
-                compactThreshold={100000}
-              />
-            </Box>
-          </DarkTooltip>
-          <DarkTooltip
-            title={
-              <Typography variant="secondary14" color="common.white">
-                {formattedBorrowReserve.name} ({formattedBorrowReserve.symbol})
-              </Typography>
-            }
-            arrow
-            placement="top"
-          >
-            <Typography variant="secondary14" color="text.primary">
-              {formattedBorrowReserve.symbol}
-            </Typography>
-          </DarkTooltip>
-        </Box>
-      );
-    case 'RedeemUnderlying':
-      const withdrawTx = transaction as TransactionHistoryItem<ActionFields['RedeemUnderlying']>;
-      const formattedWithdrawReserve = fetchIconSymbolAndNameHistorical(withdrawTx.reserve);
-      const formattedWithdrawAmount = formatUnits(withdrawTx.amount, withdrawTx.reserve.decimals);
-      return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-          <TokenIcon symbol={formattedWithdrawReserve.iconSymbol} sx={{ fontSIze: iconSize }} />
-          <Typography
-            variant="secondary14"
-            color="text.primary"
-            sx={{ ml: formattedWithdrawReserve.iconSymbol.split('_').length > 1 ? 3 : 1, mb: 0.5 }}
-          >
-            &minus;
-          </Typography>
-          <DarkTooltip
-            wrap
-            title={
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <PriceUnavailable
-                  value={Number(withdrawTx.assetPriceUSD) * Number(formattedWithdrawAmount)}
-                />
-                <Box sx={{ display: 'flex' }}>
-                  <FormattedNumber
-                    value={formattedWithdrawAmount}
-                    variant="secondary14"
-                    color="common.white"
-                    sx={{ mr: 1 }}
-                  />
-                  <Typography variant="secondary14" color="common.white">
-                    {formattedWithdrawReserve.symbol}
-                  </Typography>
-                </Box>
-              </Box>
-            }
-            arrow
-            placement="top"
-          >
-            <Box>
-              <FormattedNumber
-                value={formattedWithdrawAmount}
-                variant="secondary14"
-                color="text.primary"
-                sx={{ mr: 1 }}
-                compact
-                compactThreshold={100000}
-              />
-            </Box>
-          </DarkTooltip>
-          <DarkTooltip
-            title={
-              <Typography variant="secondary14" color="common.white">
-                {formattedWithdrawReserve.name} ({formattedWithdrawReserve.symbol})
-              </Typography>
-            }
-            arrow
-            placement="top"
-          >
-            <Typography variant="secondary14" color="text.primary">
-              {formattedWithdrawReserve.symbol}
-            </Typography>
-          </DarkTooltip>
-        </Box>
-      );
-    case 'Repay':
-      const repayTx = transaction as TransactionHistoryItem<ActionFields['Repay']>;
-      const formattedRepayReserve = fetchIconSymbolAndNameHistorical(repayTx.reserve);
-      const formattedRepayAmount = formatUnits(repayTx.amount, repayTx.reserve.decimals);
-      return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-          <TokenIcon symbol={formattedRepayReserve.iconSymbol} sx={{ fontSIze: iconSize }} />
-          <Typography
-            variant="secondary14"
-            color="text.primary"
-            sx={{ ml: formattedRepayReserve.iconSymbol.split('_').length > 1 ? 3 : 1, mb: 0.5 }}
-          >
-            +
-          </Typography>
-          <DarkTooltip
-            wrap
-            title={
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <PriceUnavailable
-                  value={Number(repayTx.assetPriceUSD) * Number(formattedRepayAmount)}
-                />
-                <Box sx={{ display: 'flex' }}>
-                  <FormattedNumber
-                    value={formattedRepayAmount}
-                    variant="secondary14"
-                    color="common.white"
-                    sx={{ mr: 1 }}
-                  />
-                  <Typography variant="secondary14" color="common.white">
-                    {formattedRepayReserve.symbol}
-                  </Typography>
-                </Box>
-              </Box>
-            }
-            arrow
-            placement="top"
-          >
-            <Box>
-              <FormattedNumber
-                value={formattedRepayAmount}
-                variant="secondary14"
-                color="text.primary"
-                sx={{ mr: 1 }}
-                compact
-                compactThreshold={100000}
-              />
-            </Box>
-          </DarkTooltip>
-          <DarkTooltip
-            title={
-              <Typography variant="secondary14" color="common.white">
-                {formattedRepayReserve.name} ({formattedRepayReserve.symbol})
-              </Typography>
-            }
-            arrow
-            placement="top"
-          >
-            <Typography variant="secondary14" color="sucess.main">
-              {formattedRepayReserve.symbol}
-            </Typography>
-          </DarkTooltip>
-        </Box>
-      );
-    case 'UsageAsCollateral':
-      const collateralUsageTx = transaction as TransactionHistoryItem<
-        ActionFields['UsageAsCollateral']
-      >;
-      const formattedCollateralReserve = fetchIconSymbolAndNameHistorical(
-        collateralUsageTx.reserve
-      );
-      return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-          <Typography variant="description" color="text.primary">
-            <Trans>Collateralization</Trans>
-          </Typography>
-          {collateralUsageTx.toState === true ? (
-            <Typography variant="subheader1" color="success.main" sx={{ px: 0.75 }}>
-              <Trans>enabled</Trans>
-            </Typography>
-          ) : (
-            <Typography variant="subheader1" color="error.main" sx={{ px: 0.75 }}>
-              <Trans>disabled</Trans>
-            </Typography>
-          )}
-          <Typography variant="description" color="text.primary" sx={{ mr: 0.5 }}>
-            <Trans>for</Trans>
-          </Typography>
-          <TokenIcon
-            symbol={formattedCollateralReserve.iconSymbol}
-            sx={{
-              fontSIze: iconSize,
-            }}
-          />
-          <DarkTooltip
-            title={
-              <Typography variant="secondary14" color="common.white">
-                {formattedCollateralReserve.name} ({formattedCollateralReserve.symbol})
-              </Typography>
-            }
-            arrow
-            placement="top"
-          >
-            <Typography
-              variant="secondary14"
-              color="text.primary"
-              sx={{ ml: formattedCollateralReserve.iconSymbol.split('_').length > 1 ? 3 : 1 }}
-            >
-              {formattedCollateralReserve.symbol}
-            </Typography>
-          </DarkTooltip>
-        </Box>
-      );
-    case 'SwapBorrowRate':
-    case 'Swap':
-      const swapBorrowRateTx = transaction as TransactionHistoryItem<
-        ActionFields['SwapBorrowRate']
-      >;
-      const formattedSwapReserve = fetchIconSymbolAndNameHistorical(swapBorrowRateTx.reserve);
-      return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-          <BorrowRateModeBlock
-            borrowRateMode={swapBorrowRateTx.borrowRateModeFrom.toString()}
-            swapBorrowRateTx={swapBorrowRateTx}
-          />
-          <SvgIcon sx={{ fontSize: '20px', px: 1 }}>
-            <ArrowNarrowRightIcon />
-          </SvgIcon>
-          <BorrowRateModeBlock
-            borrowRateMode={swapBorrowRateTx.borrowRateModeTo.toString()}
-            swapBorrowRateTx={swapBorrowRateTx}
-          />
-          <Typography variant="caption" color="text.secondary" px={2}>
-            <Trans>for</Trans>
-          </Typography>
-          <TokenIcon symbol={formattedSwapReserve.iconSymbol} sx={{ fontSIze: iconSize }} />
-          <DarkTooltip
-            title={
-              <Typography variant="secondary14" color="common.white">
-                {formattedSwapReserve.name} ({formattedSwapReserve.symbol})
-              </Typography>
-            }
-            arrow
-            placement="top"
-          >
-            <Typography
-              variant="secondary14"
-              color="text.primary"
-              sx={{ ml: formattedSwapReserve.iconSymbol.split('_').length > 1 ? 3 : 1 }}
-            >
-              {swapBorrowRateTx.reserve.symbol}
-            </Typography>
-          </DarkTooltip>
-        </Box>
-      );
-    case 'LiquidationCall':
-      const liquidationTx = transaction as TransactionHistoryItem<ActionFields['LiquidationCall']>;
-      const formattedLiquidationColatReserve = fetchIconSymbolAndNameHistorical(
-        liquidationTx.collateralReserve
-      );
-      const formattedLiquidationBorrowReserve = fetchIconSymbolAndNameHistorical(
-        liquidationTx.principalReserve
-      );
-      const formattedCollateralAmount = formatUnits(
-        liquidationTx.collateralAmount,
-        liquidationTx.collateralReserve.decimals
-      );
-      const formattedLiquidationBorrowAmount = formatUnits(
-        liquidationTx.principalAmount,
-        liquidationTx.principalReserve.decimals
-      );
-      return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }} pr={4.5}>
-            <Typography>
-              <Trans>Liquidated collateral</Trans>
-            </Typography>
-            <Box sx={{ display: 'inline-flex' }}>
-              <TokenIcon
-                symbol={formattedLiquidationColatReserve.iconSymbol}
-                sx={{ fontSIze: iconSize, pr: 0.5 }}
-              />
-              <Box
-                sx={{
-                  ml: formattedLiquidationColatReserve.iconSymbol.split('_').length > 1 ? 3 : 1,
-                  display: 'inline-flex',
-                }}
-              >
-                <Typography
-                  variant="secondary14"
-                  color="text.primary"
-                  sx={{ display: 'inline-flex', mb: 0.5 }}
-                >
-                  &minus;
-                </Typography>
-                <DarkTooltip
-                  wrap
-                  title={
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <PriceUnavailable
-                        value={
-                          Number(liquidationTx.collateralAssetPriceUSD) *
-                          Number(formattedCollateralAmount)
-                        }
-                      />
-                      <Box sx={{ display: 'flex' }}>
-                        <FormattedNumber
-                          value={formattedCollateralAmount}
-                          variant="secondary14"
-                          color="common.white"
-                          sx={{ mr: 1 }}
-                        />
-                        <Typography variant="secondary14" color="common.white">
-                          {formattedLiquidationColatReserve.symbol}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  }
-                  arrow
-                  placement="top"
-                >
-                  <Box>
-                    <FormattedNumber
-                      value={formattedCollateralAmount}
-                      variant="secondary14"
-                      color="text.primary"
-                      sx={{ mr: 1 }}
-                      compact
-                      compactThreshold={100000}
-                    />
-                  </Box>
-                </DarkTooltip>
-                <DarkTooltip
-                  title={
-                    <Typography variant="secondary14" color="common.white">
-                      {formattedLiquidationColatReserve.name} (
-                      {formattedLiquidationColatReserve.symbol})
-                    </Typography>
-                  }
-                  arrow
-                  placement="top"
-                >
-                  <Typography
-                    variant="secondary14"
-                    color="text.primary"
-                    sx={{ display: 'inline-flex' }}
-                  >
-                    {formattedLiquidationColatReserve.symbol}
-                  </Typography>
-                </DarkTooltip>
+export const ActionDetails = ({ transaction, iconSize = '16px' }: ActionDetailsProps) => {
+  if (isSDKTransaction(transaction) && hasAmount(transaction)) {
+    const { amount, reserve } = transaction;
+    const action = transaction.__typename;
+
+    const isPositive = action === 'UserSupplyTransaction' || action === 'UserRepayTransaction';
+    const symbol = isPositive ? '+' : '−';
+
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <TokenIcon symbol={reserve.underlyingToken.symbol} sx={{ fontSize: iconSize }} />
+        <Typography variant="h5" color="fg-1" sx={{ ml: 1, mb: 0.5 }}>
+          {symbol}
+        </Typography>
+        <DarkTooltip
+          wrap
+          title={
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Typography variant="h5">${amount.usd}</Typography>
+              <Box sx={{ display: 'flex' }}>
+                <FormattedNumber value={amount.amount.value} variant="h5" sx={{ mr: 1 }} />
+                <Typography variant="h5">{reserve.underlyingToken.symbol}</Typography>
               </Box>
             </Box>
+          }
+          arrow
+          placement="top"
+        >
+          <Box>
+            <FormattedNumber
+              value={amount.amount.value}
+              variant="h5"
+              color="fg-1"
+              compact
+              compactThreshold={100000}
+              sx={{ mr: 1 }}
+            />
           </Box>
-          <SvgIcon sx={{ fontSize: '14px' }}>
-            <ArrowNarrowRightIcon />
-          </SvgIcon>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }} pl={4.5}>
-            <Typography>
-              <Trans>Covered debt</Trans>
+        </DarkTooltip>
+        <DarkTooltip
+          title={
+            <Typography variant="h5">
+              {reserve.underlyingToken.name} ({reserve.underlyingToken.symbol})
             </Typography>
-            <Box sx={{ display: 'inline-flex' }}>
-              <TokenIcon
-                symbol={formattedLiquidationBorrowReserve.iconSymbol}
-                sx={{ fontSIze: iconSize, pr: 0.5 }}
-              />
-              <Box
-                sx={{
-                  ml: formattedLiquidationBorrowReserve.iconSymbol.split('_').length > 1 ? 3 : 1,
-                  display: 'inline-flex',
-                }}
-              >
-                <Typography
-                  variant="secondary14"
-                  color="text.primary"
-                  sx={{ display: 'inline-flex', mb: 0.5 }}
-                >
-                  +
-                </Typography>
-                <DarkTooltip
-                  wrap
-                  title={
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <PriceUnavailable
-                        value={
-                          Number(liquidationTx.borrowAssetPriceUSD) *
-                          Number(formattedLiquidationBorrowAmount)
-                        }
-                      />
-                      <Box sx={{ display: 'flex' }}>
-                        <FormattedNumber
-                          value={formattedLiquidationBorrowAmount}
-                          variant="secondary14"
-                          color="common.white"
-                          sx={{ mr: 1 }}
-                        />
-                        <Typography variant="secondary14" color="common.white">
-                          {formattedLiquidationBorrowReserve.symbol}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  }
-                  arrow
-                  placement="top"
-                >
-                  <Box>
-                    <FormattedNumber
-                      value={formattedLiquidationBorrowAmount}
-                      variant="secondary14"
-                      color="text.primary"
-                      sx={{ mr: 1 }}
-                      compact
-                      compactThreshold={100000}
-                    />
-                  </Box>
-                </DarkTooltip>
-                <DarkTooltip
-                  title={
-                    <Typography variant="secondary14" color="common.white">
-                      {formattedLiquidationBorrowReserve.name} (
-                      {formattedLiquidationBorrowReserve.symbol})
-                    </Typography>
-                  }
-                  arrow
-                  placement="top"
-                >
-                  <Typography
-                    variant="secondary14"
-                    color="text.primary"
-                    sx={{ display: 'inline-flex' }}
-                  >
-                    {formattedLiquidationBorrowReserve.symbol}
-                  </Typography>
-                </DarkTooltip>
-              </Box>
-            </Box>
-          </Box>
-        </Box>
-      );
-    default:
-      return <></>;
+          }
+          arrow
+          placement="top"
+        >
+          <Typography variant="h5" color="fg-1">
+            {reserve.underlyingToken.symbol}
+          </Typography>
+        </DarkTooltip>
+      </Box>
+    );
   }
+
+  // For SDK liquidation transactions
+  if (isSDKTransaction(transaction) && hasCollateralReserve(transaction)) {
+    const { collateral, debtRepaid } = transaction;
+
+    return (
+      <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column' }} pr={2}>
+          <Typography variant="caption" color="fg-2">
+            <Trans>Liquidated collateral</Trans>
+          </Typography>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+            <TokenIcon
+              symbol={collateral.reserve.underlyingToken.symbol}
+              sx={{ fontSize: iconSize, pr: 0.5 }}
+            />
+            <Typography variant="h5" color="fg-1" sx={{ ml: 1, mb: 0.5 }}>
+              −
+            </Typography>
+            <DarkTooltip
+              wrap
+              title={
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Typography variant="h5">${collateral.amount!.usd}</Typography>
+                  <Box sx={{ display: 'flex' }}>
+                    <FormattedNumber
+                      value={collateral.amount!.amount.value}
+                      variant="h5"
+                      sx={{ mr: 1 }}
+                    />
+                    <Typography variant="h5">
+                      {collateral.reserve.underlyingToken.symbol}
+                    </Typography>
+                  </Box>
+                </Box>
+              }
+              arrow
+              placement="top"
+            >
+              <Box>
+                <FormattedNumber
+                  value={collateral.amount!.amount.value}
+                  variant="h5"
+                  color="fg-1"
+                  sx={{ mr: 1 }}
+                  compact
+                  compactThreshold={100000}
+                />
+              </Box>
+            </DarkTooltip>
+            <Typography variant="h5" color="fg-1">
+              {collateral.reserve.underlyingToken.symbol}
+            </Typography>
+          </Box>
+        </Box>
+
+        <SvgIcon sx={{ fontSize: '14px' }}>
+          <ArrowNarrowRightIcon />
+        </SvgIcon>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column' }} pl={2}>
+          <Typography variant="caption" color="fg-2">
+            <Trans>Covered debt</Trans>
+          </Typography>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+            <TokenIcon
+              symbol={debtRepaid.reserve.underlyingToken.symbol}
+              sx={{ fontSize: iconSize, pr: 0.5 }}
+            />
+            <Typography variant="h5" color="fg-1" sx={{ ml: 1, mb: 0.5 }}>
+              +
+            </Typography>
+            <DarkTooltip
+              wrap
+              title={
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Typography variant="h5">${debtRepaid.amount.usd}</Typography>
+                  <Box sx={{ display: 'flex' }}>
+                    <FormattedNumber
+                      value={debtRepaid.amount.amount.value}
+                      variant="h5"
+                      sx={{ mr: 1 }}
+                    />
+                    <Typography variant="h5">
+                      {debtRepaid.reserve.underlyingToken.symbol}
+                    </Typography>
+                  </Box>
+                </Box>
+              }
+              arrow
+              placement="top"
+            >
+              <Box>
+                <FormattedNumber
+                  value={debtRepaid.amount.amount.value}
+                  variant="h5"
+                  color="fg-1"
+                  sx={{ mr: 1 }}
+                  compact
+                  compactThreshold={100000}
+                />
+              </Box>
+            </DarkTooltip>
+            <Typography variant="h5" color="fg-1">
+              {debtRepaid.reserve.underlyingToken.symbol}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // For UserUsageAsCollateralTransaction transactions
+  if (
+    isSDKTransaction(transaction) &&
+    transaction.__typename === 'UserUsageAsCollateralTransaction'
+  ) {
+    const { enabled, reserve } = transaction;
+
+    return (
+      <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+        <Typography variant="description" color="fg-1">
+          <Trans>Collateralization</Trans>
+        </Typography>
+        {enabled ? (
+          <Typography variant="subheader1" color="success.main" sx={{ px: 0.75 }}>
+            <Trans>enabled</Trans>
+          </Typography>
+        ) : (
+          <Typography variant="subheader1" color="error.main" sx={{ px: 0.75 }}>
+            <Trans>disabled</Trans>
+          </Typography>
+        )}
+        <Typography variant="description" color="fg-1" sx={{ mr: 0.5 }}>
+          <Trans>for</Trans>
+        </Typography>
+        <TokenIcon symbol={reserve.underlyingToken.symbol} sx={{ fontSize: iconSize }} />
+        <DarkTooltip
+          title={
+            <Typography variant="h5">
+              {reserve.underlyingToken.name} ({reserve.underlyingToken.symbol})
+            </Typography>
+          }
+          arrow
+          placement="top"
+        >
+          <Typography variant="h5" color="fg-1" sx={{ ml: 1 }}>
+            {reserve.underlyingToken.symbol}
+          </Typography>
+        </DarkTooltip>
+      </Box>
+    );
+  }
+
+  // For swap transactions with token pairs (CoW and ParaSwap)
+  if (hasSrcOrDestToken(transaction)) {
+    const swapType = transactionHistoryItemTypeToSwapType(transaction.action);
+    const areInputsInverted = swapType && swapTypesThatRequiresInvertedQuote.includes(swapType);
+    const data = transaction as TransactionHistoryItem<CowSwapSubset>;
+    const swapTx = !areInputsInverted
+      ? data
+      : {
+          ...data,
+          underlyingSrcToken: data.underlyingDestToken,
+          underlyingDestToken: data.underlyingSrcToken,
+          srcAToken: data.destAToken,
+          destAToken: data.srcAToken,
+          srcAmount: data.destAmount,
+          destAmount: data.srcAmount,
+        };
+
+    const formattedCowSwapSrcToken = swapTx.underlyingSrcToken;
+    const formattedCowSwapDestToken = swapTx.underlyingDestToken;
+
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }} pr={2}>
+          <TokenIcon
+            symbol={formattedCowSwapSrcToken.symbol}
+            sx={{ fontSize: iconSize }}
+            aToken={!!swapTx.srcAToken}
+          />
+          <DarkTooltip
+            title={
+              <Typography variant="h5">
+                {formatUnits(swapTx.srcAmount, swapTx.underlyingSrcToken.decimals)}{' '}
+                {formattedCowSwapSrcToken.symbol}
+              </Typography>
+            }
+            arrow
+            placement="top"
+            enterTouchDelay={100}
+            leaveTouchDelay={500}
+          >
+            <Box>
+              <FormattedNumber
+                value={formatUnits(swapTx.srcAmount, swapTx.underlyingSrcToken.decimals)}
+                variant="h5"
+                color="fg-1"
+                sx={{ mr: 1, ml: 1 }}
+                visibleDecimals={2}
+              />
+            </Box>
+          </DarkTooltip>
+          <DarkTooltip
+            title={
+              <Typography variant="h5">
+                {formattedCowSwapSrcToken.name} ({formattedCowSwapSrcToken.symbol})
+              </Typography>
+            }
+            arrow
+            placement="top"
+          >
+            <Typography variant="h5" color="fg-1">
+              {formattedCowSwapSrcToken.symbol}
+            </Typography>
+          </DarkTooltip>
+        </Box>
+        <SvgIcon sx={{ fontSize: '14px' }}>
+          <ArrowNarrowRightIcon />
+        </SvgIcon>
+        <Box sx={{ display: 'flex', alignItems: 'center' }} pl={2}>
+          <TokenIcon
+            symbol={formattedCowSwapDestToken.symbol}
+            sx={{ fontSize: iconSize }}
+            aToken={!!swapTx.destAToken}
+          />
+          <DarkTooltip
+            title={
+              <Typography variant="h5">
+                {formatUnits(swapTx.destAmount, swapTx.underlyingDestToken.decimals)}{' '}
+                {formattedCowSwapDestToken.symbol}
+              </Typography>
+            }
+            arrow
+            placement="top"
+            enterTouchDelay={100}
+            leaveTouchDelay={500}
+          >
+            <Box>
+              <FormattedNumber
+                value={formatUnits(swapTx.destAmount, swapTx.underlyingDestToken.decimals)}
+                variant="h5"
+                color="fg-1"
+                visibleDecimals={2}
+                sx={{ mr: 1, ml: 1 }}
+              />
+            </Box>
+          </DarkTooltip>
+          <DarkTooltip
+            title={
+              <Typography variant="h5">
+                {formattedCowSwapDestToken.name} ({formattedCowSwapDestToken.symbol})
+              </Typography>
+            }
+            arrow
+            placement="top"
+          >
+            <Typography variant="h5" color="fg-1">
+              {formattedCowSwapDestToken.symbol}
+            </Typography>
+          </DarkTooltip>
+        </Box>
+
+        {/* Status. Cancelled and expired share a branch but not a chip: one is the error orange
+            with a cross, the other the neutral grey with a clock. */}
+        {isOrderLoading(swapTx.status) && (
+          <Alert variant="badge" severity="warning" icon={<StatusInProgressIcon />} sx={BADGE_SX}>
+            <Trans>In Progress</Trans>
+          </Alert>
+        )}
+        {isOrderFilled(swapTx.status) && (
+          <Alert variant="badge" severity="success" icon={<StatusFilledIcon />} sx={BADGE_SX}>
+            <Trans>Filled</Trans>
+          </Alert>
+        )}
+        {isOrderCancelled(swapTx.status) && (
+          <Alert variant="badge" severity="error" icon={<StatusCancelledIcon />} sx={BADGE_SX}>
+            <Trans>Cancelled</Trans>
+          </Alert>
+        )}
+        {isOrderExpired(swapTx.status) && (
+          <Alert variant="badge" severity="info" icon={<StatusExpiredIcon />} sx={BADGE_SX}>
+            <Trans>Expired</Trans>
+          </Alert>
+        )}
+      </Box>
+    );
+  }
+
+  // FALLBACK
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="h5" color="fg-2">
+        <Trans>Transaction details not available</Trans>
+      </Typography>
+    </Box>
+  );
 };

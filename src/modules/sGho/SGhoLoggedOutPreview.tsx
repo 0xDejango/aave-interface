@@ -1,0 +1,79 @@
+import { Trans } from '@lingui/macro';
+import { Box, Button, Typography } from '@mui/material';
+import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
+import { figVars } from 'src/utils/figmaColors';
+
+import { StakeActionBox } from '../staking/StakeActionBox';
+
+interface SGhoLoggedOutPreviewProps {
+  rate: number;
+}
+
+/**
+ * Marketing preview rendered inside the sGHO card when no wallet is connected.
+ * Shows the product's value proposition + the deposit/withdraw structure with
+ * placeholder values, so the user can see what they'd be getting before they
+ * connect. Actual connect prompt lives in the sidebar.
+ */
+export const SGhoLoggedOutPreview = ({ rate }: SGhoLoggedOutPreviewProps) => {
+  return (
+    <Box>
+      <Box sx={{ mb: 4 }}>
+        <Typography component="h4" sx={{ mb: 1, typography: { xs: 'subheader1', xsm: 'h4' } }}>
+          <Trans>Deposit GHO</Trans>
+        </Typography>
+        <Typography color="fg-2">
+          <Trans>Deposit GHO and earn up to {(rate * 100).toFixed(2)}% APR</Trans>
+        </Typography>
+      </Box>
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderRadius: { xs: '8px', xsm: '6px' },
+          border: `1px solid ${figVars['border-0']}`,
+          p: 4,
+          mb: 6,
+        }}
+      >
+        <Box>
+          <Typography variant="caption" color="fg-2" sx={{ display: 'block' }}>
+            <Trans>Staking APR</Trans>
+          </Typography>
+          <FormattedNumber value={rate} percent variant="h4" visibleDecimals={2} />
+        </Box>
+        <Button
+          variant="contained"
+          disabled
+          sx={{ minWidth: '96px', height: '36px' }}
+          data-cy="depositBtn_SGHO_loggedOut"
+        >
+          <Trans>Deposit</Trans>
+        </Button>
+      </Box>
+
+      <StakeActionBox
+        title={<Trans>sGHO</Trans>}
+        value="0"
+        valueUSD="0"
+        dataCy="sghoBalanceBox_loggedOut"
+        bottomLineTitle={
+          <Typography variant="caption" color="fg-2">
+            <Trans>Cooldown period</Trans>
+          </Typography>
+        }
+        bottomLineComponent={
+          <Typography variant="subheader2">
+            <Trans>Instant</Trans>
+          </Typography>
+        }
+      >
+        <Button variant="tertiary" fullWidth disabled data-cy="withdrawBtn_SGHO_loggedOut">
+          <Trans>Withdraw</Trans>
+        </Button>
+      </StakeActionBox>
+    </Box>
+  );
+};

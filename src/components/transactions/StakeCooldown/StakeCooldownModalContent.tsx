@@ -3,13 +3,12 @@ import { valueToBigNumber } from '@aave/math-utils';
 import { ArrowDownIcon, CalendarIcon } from '@heroicons/react/outline';
 import { ArrowNarrowRightIcon } from '@heroicons/react/solid';
 import { Trans } from '@lingui/macro';
-import { Box, Checkbox, FormControlLabel, SvgIcon, Typography } from '@mui/material';
+import { Alert, Box, Checkbox, FormControlLabel, SvgIcon, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { formatEther, parseUnits } from 'ethers/lib/utils';
 import React, { useState } from 'react';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
 import { TokenIcon } from 'src/components/primitives/TokenIcon';
-import { Warning } from 'src/components/primitives/Warning';
 import { useGeneralStakeUiData } from 'src/hooks/stake/useGeneralStakeUiData';
 import { useUserStakeUiData } from 'src/hooks/stake/useUserStakeUiData';
 import { useModalContext } from 'src/hooks/useModal';
@@ -19,7 +18,7 @@ import { stakeConfig } from 'src/ui-config/stakeConfig';
 import { GENERAL } from 'src/utils/events';
 import { getNetworkConfig } from 'src/utils/marketsAndNetworksConfig';
 
-import { formattedTime, timeText } from '../../../helpers/timeHelper';
+import { timeMessage } from '../../../helpers/timeHelper';
 import { Link } from '../../primitives/Link';
 import { TxErrorView } from '../FlowCommons/Error';
 import { GasEstimationError } from '../FlowCommons/GasEstimationError';
@@ -111,10 +110,6 @@ export const StakeCooldownModalContent = ({ stakeAssetName, icon }: StakeCooldow
   }
   if (txState.success) return <TxSuccessView action={<Trans>Stake cooldown activated</Trans>} />;
 
-  const timeMessage = (time: number) => {
-    return `${formattedTime(time)} ${timeText(time)}`;
-  };
-
   const handleOnCoolDownCheckBox = () => {
     trackEvent(GENERAL.ACCEPT_RISK, {
       asset: stakeAssetName,
@@ -159,14 +154,17 @@ export const StakeCooldownModalContent = ({ stakeAssetName, icon }: StakeCooldow
     <>
       <TxModalTitle title="Cooldown to unstake" />
       {isWrongNetwork && !readOnlyModeAddress && (
-        <ChangeNetworkWarning networkName={networkConfig.name} chainId={stakingChain} />
+        <ChangeNetworkWarning
+          autoSwitchOnMount={true}
+          networkName={networkConfig.name}
+          chainId={stakingChain}
+        />
       )}
       <Typography variant="description" sx={{ mb: 6 }}>
         <Trans>
-          The cooldown period is {timeMessage(stakeCooldownSeconds)}. After{' '}
-          {timeMessage(stakeCooldownSeconds)} of cooldown, you will enter unstake window of{' '}
-          {timeMessage(stakeUnstakeWindow)}. You will continue receiving rewards during cooldown and
-          unstake window.
+          You&apos;ll need to wait {timeMessage(stakeCooldownSeconds)} before you can unstake your
+          tokens. This cooldown starts when you request to unstake. Once it ends, you can withdraw
+          during the unstake window.
         </Trans>{' '}
         <Link
           onClick={() =>
@@ -194,12 +192,12 @@ export const StakeCooldownModalContent = ({ stakeAssetName, icon }: StakeCooldow
           pb: '30px',
         }}
       >
-        <Typography variant="description" color="text.primary">
+        <Typography variant="description" color="fg-1">
           <Trans>Amount to unstake</Trans>
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <TokenIcon symbol={icon} sx={{ mr: 1, width: 14, height: 14 }} />
-          <FormattedNumber value={amountToCooldown} variant="secondary14" color="text.primary" />
+          <FormattedNumber value={amountToCooldown} variant="h5" color="fg-1" />
         </Box>
       </Box>
 
@@ -213,18 +211,18 @@ export const StakeCooldownModalContent = ({ stakeAssetName, icon }: StakeCooldow
           pb: '30px',
         }}
       >
-        <Typography variant="description" color="text.primary">
+        <Typography variant="description" color="fg-1">
           <Trans>Unstake window</Trans>
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="secondary14" component="span">
+            <Typography variant="h5" component="span">
               {dateMessage(stakeCooldownSeconds)}
             </Typography>
             <SvgIcon sx={{ fontSize: '13px', mx: 1 }}>
               <ArrowNarrowRightIcon />
             </SvgIcon>
-            <Typography variant="secondary14" component="span">
+            <Typography variant="h5" component="span">
               {dateMessage(stakeCooldownSeconds + stakeUnstakeWindow)}
             </Typography>
           </Box>
@@ -333,14 +331,12 @@ export const StakeCooldownModalContent = ({ stakeAssetName, icon }: StakeCooldow
         </Typography>
       )}
 
-      <Warning severity="error">
-        <Typography variant="caption">
-          <Trans>
-            If you DO NOT unstake within {timeMessage(stakeUnstakeWindow)} of unstake window, you
-            will need to activate cooldown process again.
-          </Trans>
-        </Typography>
-      </Warning>
+      <Alert severity="error" sx={{ mb: 6, width: '100%' }}>
+        <Trans>
+          If you DO NOT unstake within {timeMessage(stakeUnstakeWindow)} of unstake window, you will
+          need to activate cooldown process again.
+        </Trans>
+      </Alert>
 
       <GasStation chainId={ChainId.mainnet} gasLimit={parseUnits(gasLimit || '0', 'wei')} />
 

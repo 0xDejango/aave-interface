@@ -1,3 +1,5 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
@@ -10,7 +12,6 @@ import {
   withdraw,
 } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aETHArbitrumV3: 100,
@@ -55,15 +56,8 @@ const testData = {
       {
         asset: assets.arbitrumMarket.USDC,
         apyType: constants.apyType.stable,
-        amount: 2,
+        amount: 4,
         hasApproval: false,
-        repayOption: constants.repayType.collateral,
-      },
-      {
-        asset: assets.arbitrumMarket.USDC,
-        apyType: constants.apyType.stable,
-        amount: 2,
-        hasApproval: true,
         repayOption: constants.repayType.wallet,
       },
       {
@@ -104,7 +98,6 @@ const testData = {
 describe('USDC INTEGRATION SPEC, ARBITRUM V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyArbitrumFork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {

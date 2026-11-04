@@ -1,44 +1,51 @@
 import { Trans } from '@lingui/macro';
-import { Box, Paper, Skeleton, Typography } from '@mui/material';
+import { Box, Button, Paper, Skeleton, Typography } from '@mui/material';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { CheckBadge } from 'src/components/primitives/CheckBadge';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
+import { Link } from 'src/components/primitives/Link';
 import { Row } from 'src/components/primitives/Row';
-import { Proposal } from 'src/hooks/governance/useProposals';
-import { ProposalVotes } from 'src/hooks/governance/useProposalVotes';
+import { ProposalDetailDisplay, VotersSplitDisplay } from 'src/modules/governance/types';
+import { useRootStore } from 'src/store/root';
+import { cardHeadingSx, cardPaddingSx } from 'src/utils/cardStyles';
+import { GENERAL } from 'src/utils/events';
 
 import { StateBadge } from '../StateBadge';
 import { VoteBar } from '../VoteBar';
 import { VotersListContainer } from './VotersListContainer';
 
-interface VotingResultsPros {
-  proposal?: Proposal;
-  proposalVotes?: ProposalVotes;
+interface VotingResultsProps {
+  proposal?: ProposalDetailDisplay | null;
+  voters?: VotersSplitDisplay;
   loading: boolean;
+  votesLoading?: boolean;
 }
 
-export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResultsPros) => {
+export const VotingResults = ({ proposal, loading, voters, votesLoading }: VotingResultsProps) => {
+  const trackEvent = useRootStore((store) => store.trackEvent);
+  const discussionUrl = proposal?.discussions?.match(/https?:\/\/[^\s"]+/)?.[0];
   return (
-    <Paper sx={{ px: 6, py: 4, mb: 2.5 }}>
-      <Typography variant="h3">
+    <Paper variant="card" sx={cardPaddingSx}>
+      <Typography variant="h3" sx={cardHeadingSx}>
         <Trans>Voting results</Trans>
       </Typography>
       {proposal ? (
         <>
           <VoteBar
             yae
-            percent={proposal.votingInfo.forPercent}
-            votes={proposal.votingInfo.forVotes}
+            percent={proposal.voteInfo.forPercent}
+            votes={proposal.voteInfo.forVotes}
             sx={{ mt: 8 }}
             loading={loading}
           />
           <VoteBar
-            percent={proposal.votingInfo.againstPercent}
-            votes={proposal.votingInfo.againstVotes}
+            percent={proposal.voteInfo.againstPercent}
+            votes={proposal.voteInfo.againstVotes}
             sx={{ mt: 3 }}
             loading={loading}
           />
-          {proposalVotes && (
-            <VotersListContainer proposal={proposal.votingInfo} proposalVotes={proposalVotes} />
+          {voters && !votesLoading && (
+            <VotersListContainer voteInfo={proposal.voteInfo} voters={voters} />
           )}
           <Row caption={<Trans>State</Trans>} sx={{ height: 48 }} captionVariant="description">
             <Box
@@ -49,30 +56,19 @@ export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResult
               }}
             >
               <StateBadge state={proposal.badgeState} loading={loading} />
-              {/*
-              <Box sx={{ mt: 0.5 }}>
-                <FormattedProposalTime
-                  state={proposal.proposalState}
-                  startTimestamp={proposal.startTimestamp}
-                  executionTime={proposal.executionTime}
-                  expirationTimestamp={proposal.expirationTimestamp}
-                  executionTimeWithGracePeriod={proposal.executionTimeWithGracePeriod}
-                />
-              </Box>
-              */}
             </Box>
           </Row>
           <Row caption={<Trans>Quorum</Trans>} sx={{ height: 48 }} captionVariant="description">
             <CheckBadge
               loading={loading}
               text={
-                proposal.votingInfo.quorumReached ? (
+                proposal.voteInfo.quorumReached ? (
                   <Trans>Reached</Trans>
                 ) : (
                   <Trans>Not reached</Trans>
                 )
               }
-              checked={proposal.votingInfo.quorumReached}
+              checked={proposal.voteInfo.quorumReached}
               sx={{ height: 48 }}
               variant="description"
             />
@@ -81,7 +77,7 @@ export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResult
             caption={
               <>
                 <Trans>Current votes</Trans>
-                <Typography variant="caption" color="text.muted">
+                <Typography variant="caption" color="fg-3">
                   Required
                 </Typography>
               </>
@@ -91,18 +87,17 @@ export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResult
           >
             <Box sx={{ textAlign: 'right' }}>
               <FormattedNumber
-                value={proposal.votingInfo.forVotes}
+                value={proposal.voteInfo.forVotes}
                 visibleDecimals={2}
                 roundDown
                 sx={{ display: 'block' }}
               />
-
               <FormattedNumber
                 variant="caption"
-                value={proposal.votingInfo.quorum}
+                value={proposal.voteInfo.quorum}
                 visibleDecimals={2}
                 roundDown
-                color="text.muted"
+                color="fg-3"
               />
             </Box>
           </Row>
@@ -114,13 +109,13 @@ export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResult
             <CheckBadge
               loading={loading}
               text={
-                proposal.votingInfo.differentialReached ? (
+                proposal.voteInfo.differentialReached ? (
                   <Trans>Reached</Trans>
                 ) : (
                   <Trans>Not reached</Trans>
                 )
               }
-              checked={proposal.votingInfo.differentialReached}
+              checked={proposal.voteInfo.differentialReached}
               sx={{ height: 48 }}
               variant="description"
             />
@@ -129,7 +124,7 @@ export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResult
             caption={
               <>
                 <Trans>Current differential</Trans>
-                <Typography variant="caption" color="text.muted">
+                <Typography variant="caption" color="fg-3">
                   Required
                 </Typography>
               </>
@@ -139,33 +134,40 @@ export const VotingResults = ({ proposal, loading, proposalVotes }: VotingResult
           >
             <Box sx={{ textAlign: 'right' }}>
               <FormattedNumber
-                value={proposal.votingInfo.currentDifferential}
+                value={proposal.voteInfo.currentDifferential}
                 visibleDecimals={2}
                 roundDown
                 sx={{ display: 'block' }}
               />
               <FormattedNumber
                 variant="caption"
-                value={proposal.votingInfo.requiredDifferential}
+                value={proposal.voteInfo.requiredDifferential}
                 visibleDecimals={2}
                 roundDown
-                color="text.muted"
+                color="fg-3"
               />
             </Box>
           </Row>
-          {/*
-          <Row
-            caption={<Trans>Total voting power</Trans>}
-            sx={{ height: 48 }}
-            captionVariant="description"
-          >
-            <FormattedNumber
-              value={normalize(proposal.totalVotingSupply, 18)}
-              visibleDecimals={0}
-              compact={false}
-            />
-          </Row>
-*/}
+          {discussionUrl && (
+            <Button
+              component={Link}
+              target="_blank"
+              rel="noopener"
+              onClick={() =>
+                trackEvent(GENERAL.EXTERNAL_LINK, {
+                  AIP: proposal.id,
+                  Link: 'Forum Discussion',
+                })
+              }
+              href={discussionUrl}
+              variant="tertiary"
+              fullWidth
+              endIcon={<ArrowUpRightIcon />}
+              sx={{ mt: 4 }}
+            >
+              <Trans>Forum discussion</Trans>
+            </Button>
+          )}
         </>
       ) : (
         <>

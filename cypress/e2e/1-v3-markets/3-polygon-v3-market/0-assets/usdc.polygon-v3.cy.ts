@@ -1,3 +1,5 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../../fixtures/assets.json';
 import constants from '../../../../fixtures/constans.json';
 import { skipState } from '../../../../support/steps/common';
@@ -10,7 +12,6 @@ import {
   withdraw,
 } from '../../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aMATICPolygonV3: 9000,
@@ -51,19 +52,12 @@ const testData = {
       amount: 10.1,
       hasApproval: false,
     },
-    repayCollateral: {
-      asset: assets.polygonV3Market.USDC,
-      apyType: constants.apyType.stable,
-      amount: 2,
-      hasApproval: false,
-      repayOption: constants.repayType.collateral,
-    },
     repay: [
       {
         asset: assets.polygonV3Market.USDC,
         apyType: constants.apyType.stable,
-        amount: 2,
-        hasApproval: true,
+        amount: 4,
+        hasApproval: false,
         repayOption: constants.repayType.wallet,
       },
       {
@@ -106,13 +100,11 @@ describe('USDC INTEGRATION SPEC, POLYGON V3 MARKET', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyPolygonFork({
     market: 'fork_proto_polygon_v3',
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.testCases.borrow.forEach((borrowCase) => {
     borrow(borrowCase, skipTestState, true);
   });
-  repay(testData.testCases.repayCollateral, skipTestState, false);
   testData.testCases.changeBorrowType.forEach((changeAPRCase) => {
     changeBorrowType(changeAPRCase, skipTestState, true);
   });

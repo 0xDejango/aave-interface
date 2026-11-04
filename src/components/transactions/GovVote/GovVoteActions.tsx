@@ -1,19 +1,20 @@
 import { ChainId } from '@aave/contract-helpers';
-import { GelatoRelay } from '@gelatonetwork/relay-sdk';
 import { Trans } from '@lingui/macro';
 import { useQueryClient } from '@tanstack/react-query';
 import { AbiCoder, keccak256, RLP } from 'ethers/lib/utils';
-import { useState } from 'react';
-import { MOCK_SIGNED_HASH } from 'src/helpers/useTransactionHandler';
 import { useGovernanceTokensAndPowers } from 'src/hooks/governance/useGovernanceTokensAndPowers';
-import { Proposal } from 'src/hooks/governance/useProposals';
+import { useIsContractAddress } from 'src/hooks/useIsContractAddress';
 import { useModalContext } from 'src/hooks/useModal';
 import { useWeb3Context } from 'src/libs/hooks/useWeb3Context';
+import { VoteProposalData } from 'src/modules/governance/types';
 import { useRootStore } from 'src/store/root';
+import { getErrorTextFromError, TxAction } from 'src/ui-config/errorMapping';
 import { governanceV3Config } from 'src/ui-config/governanceConfig';
+import { queryKeysFactory } from 'src/ui-config/queries';
 import { getProvider } from 'src/utils/marketsAndNetworksConfig';
 
 import { TxActionsWrapper } from '../TxActionsWrapper';
+import { pollVoteStatus, RelayError, submitRelayVote } from './temporary/voteRelayClient';
 import { VotingMachineService } from './temporary/VotingMachineService';
 
 export const baseSlots = {
@@ -55,7 +56,7 @@ export type AssetsBalanceSlots = Record<
 export type GovVoteActionsProps = {
   isWrongNetwork: boolean;
   blocked: boolean;
-  proposal: Proposal;
+  proposal: VoteProposalData;
   support: boolean;
 };
 
@@ -187,29 +188,29 @@ export const GovVoteActions = ({
   proposal,
   support,
 }: GovVoteActionsProps) => {
-  const {
-    mainTxState,
-    loadingTxns,
-    setMainTxState,
-    setApprovalTxState,
-    approvalTxState,
-    setTxError,
-  } = useModalContext();
+  const { mainTxState, loadingTxns, setMainTxState, setTxError } = useModalContext();
   const user = useRootStore((store) => store.account);
 
   const estimateGasLimit = useRootStore((store) => store.estimateGasLimit);
   const { sendTx, signTxData } = useWeb3Context();
   const queryClient = useQueryClient();
 
-  const tokenPowers = useGovernanceTokensAndPowers(proposal.subgraphProposal.snapshotBlockHash);
-  const [signature, setSignature] = useState<string | undefined>(undefined);
-  const proposalId = +proposal.subgraphProposal.id;
-  const blockHash = proposal.subgraphProposal.snapshotBlockHash;
-  const votingChainId = +proposal.subgraphProposal.votingPortal.votingMachineChainId;
+  const tokenPowers = useGovernanceTokensAndPowers(proposal.snapshotBlockHash);
+  const proposalId = +proposal.proposalId;
+  const blockHash = proposal.snapshotBlockHash;
+  const votingChainId = proposal.votingMachineChainId;
   const votingMachineAddress =
     governanceV3Config.votingChainConfig[votingChainId].votingMachineAddress;
 
-  const withGelatoRelayer = false;
+  // Smart contract wallets (e.g. Safe) can't use the sponsored path: the relay calls
+  // `submitVoteBySignature`, which verifies the vote with `ecrecover`, so the signer must
+  // be an EOA. The wallet has to be on the voting chain to sign (wallets reject typed data
+  // for another chainId), so that's where a contract wallet will have code. Stay self-paid
+  // until the lookup resolves.
+  const { data: isContractWallet } = useIsContractAddress(user, votingChainId);
+
+  const withGaslessVoting =
+    process.env.NEXT_PUBLIC_ENABLE_GASLESS_VOTING === 'true' && isContractWallet === false;
 
   const assets: Array<{ underlyingAsset: string; isWithDelegatedPower: boolean }> = [];
 
@@ -234,104 +235,100 @@ export const GovVoteActions = ({
     });
   }
 
+  // Self-paid vote: the connected wallet sends `submitVote` and pays gas. Also the
+  // fallback when the sponsored relay is unavailable.
+  const submitSelfPaidVote = async (proofs: Awaited<ReturnType<typeof getVotingBalanceProofs>>) => {
+    const votingMachineService = new VotingMachineService(votingMachineAddress);
+    const tx = await votingMachineService.generateSubmitVoteTxData(
+      user,
+      proposalId,
+      support,
+      proofs
+    );
+
+    const txWithEstimatedGas = await estimateGasLimit(tx, votingChainId);
+
+    const response = await sendTx(txWithEstimatedGas);
+    await response.wait(1);
+    setMainTxState({
+      txHash: response.hash,
+      loading: false,
+      success: true,
+    });
+
+    queryClient.invalidateQueries({ queryKey: queryKeysFactory.governanceCache });
+  };
+
   const action = async () => {
     setMainTxState({ ...mainTxState, loading: true });
     try {
       const proofs = await getVotingBalanceProofs(user, assets, ChainId.mainnet, blockHash);
 
-      const votingMachineService = new VotingMachineService(votingMachineAddress);
+      if (withGaslessVoting) {
+        try {
+          // Sign over the assets + slots only; the proof bytes are sent but not signed.
+          const toSign = generateSubmitVoteSignature(
+            votingChainId,
+            votingMachineAddress,
+            proposalId,
+            user,
+            support,
+            assets.map((elem) => ({
+              underlyingAsset: elem.underlyingAsset,
+              slot: getVoteBalanceSlot(
+                elem.underlyingAsset,
+                elem.isWithDelegatedPower,
+                governanceV3Config.votingAssets.aAaveTokenAddress,
+                assetsBalanceSlots
+              ),
+            }))
+          );
+          const signature = await signTxData(toSign);
 
-      if (withGelatoRelayer && signature) {
-        const tx = await votingMachineService.generateSubmitVoteBySignatureTxData(
-          user,
-          proposalId,
-          support,
-          proofs,
-          signature.toString()
-        );
+          // The relay encodes `submitVoteBySignature` itself — send raw proofs + signature.
+          const accepted = await submitRelayVote({
+            chainId: votingChainId,
+            proposalId,
+            voter: user,
+            support,
+            votingBalanceProofs: proofs,
+            signature: signature.toString(),
+          });
 
-        const gelatoRelay = new GelatoRelay();
-        const gelatoRequest = {
-          chainId: BigInt(votingChainId),
-          target: votingMachineAddress,
-          data: tx.data || '',
-        };
+          const txHash = await pollVoteStatus(accepted.transactionId, accepted.transactionHash);
 
-        const response = await gelatoRelay.sponsoredCall(gelatoRequest, '');
-        setTimeout(async function checkForStatus() {
-          const status = await gelatoRelay.getTaskStatus(response.taskId);
-          if (status?.blockNumber && status.transactionHash) {
-            setMainTxState({
-              txHash: status.transactionHash,
-              loading: false,
-              success: true,
-            });
-            queryClient.invalidateQueries({ queryKey: ['governance_proposal', proposalId, user] });
-            queryClient.invalidateQueries({ queryKey: ['proposalVotes', proposalId] });
-            return;
-          } else {
-            setTimeout(checkForStatus, 5000);
-            return;
+          setMainTxState({
+            txHash,
+            loading: false,
+            success: true,
+          });
+
+          // The relay indexes the VoteEmitted event asynchronously, so this immediate
+          // refetch usually races ahead of the indexer. Refetch again after a short
+          // delay to pick up the freshly-cast vote.
+          queryClient.invalidateQueries({ queryKey: queryKeysFactory.governanceCache });
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeysFactory.governanceCache });
+          }, 8000);
+          return;
+        } catch (err) {
+          // Relayer temporarily down — fall back to a self-paid vote. Any other relay
+          // error (bad signature, already voted, simulation reverted, vote in flight)
+          // is surfaced to the user rather than silently retried.
+          if (!(err instanceof RelayError && err.code === 'RELAYER_UNAVAILABLE')) {
+            throw err;
           }
-        }, 5000);
-      } else {
-        const tx = await votingMachineService.generateSubmitVoteTxData(
-          user,
-          proposalId,
-          support,
-          proofs
-        );
-
-        const txWithEstimatedGas = await estimateGasLimit(tx, votingChainId);
-
-        const response = await sendTx(txWithEstimatedGas);
-        await response.wait(1);
-        setMainTxState({
-          txHash: response.hash,
-          loading: false,
-          success: true,
-        });
-
-        queryClient.invalidateQueries({ queryKey: ['governance_proposal', proposalId, user] });
-        queryClient.invalidateQueries({ queryKey: ['proposalVotes', proposalId] });
+        }
       }
+
+      await submitSelfPaidVote(proofs);
     } catch (err) {
+      setTxError(getErrorTextFromError(err as Error, TxAction.MAIN_ACTION, false));
       setMainTxState({
         txHash: undefined,
         loading: false,
       });
     }
-  };
-
-  const approve = async () => {
-    try {
-      setApprovalTxState({ ...approvalTxState, loading: true });
-      const toSign = generateSubmitVoteSignature(
-        votingChainId,
-        votingMachineAddress,
-        proposalId,
-        user,
-        support,
-        assets.map((elem) => ({
-          underlyingAsset: elem.underlyingAsset,
-          slot: getVoteBalanceSlot(
-            elem.underlyingAsset,
-            elem.isWithDelegatedPower,
-
-            governanceV3Config.votingAssets.aAaveTokenAddress,
-            assetsBalanceSlots
-          ),
-        }))
-      );
-      const signature = await signTxData(toSign);
-      setSignature(signature.toString());
-      setTxError(undefined);
-      setApprovalTxState({
-        txHash: MOCK_SIGNED_HASH,
-        loading: false,
-        success: true,
-      });
-    } catch {}
   };
 
   return (
@@ -344,7 +341,6 @@ export const GovVoteActions = ({
       actionText={support ? <Trans>VOTE YAE</Trans> : <Trans>VOTE NAY</Trans>}
       actionInProgressText={support ? <Trans>VOTE YAE</Trans> : <Trans>VOTE NAY</Trans>}
       isWrongNetwork={isWrongNetwork}
-      handleApproval={approve}
     />
   );
 };

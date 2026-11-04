@@ -61,7 +61,7 @@ const cypressConfig = createConfig(
 );
 
 const getTransport = (chainId: number) => {
-  return networkConfigs[chainId].publicJsonRPCUrl[0];
+  return networkConfigs[chainId]?.publicJsonRPCUrl[0];
 };
 
 const buildTransports = (chains: CreateConfigParameters['chains']) =>
@@ -73,7 +73,7 @@ const prodCkConfig = getDefaultConfig({
   ...defaultConfig,
 });
 
-const familyConnectorId = 'familyAccountsProvider';
+const aaveConnectorId = 'aaveAccountProvider';
 
 const connectorConfig = {
   chains: prodCkConfig.chains,
@@ -86,19 +86,19 @@ const connectors = prodCkConfig.connectors
     const c = connector(connectorConfig);
     if (c.id === 'safe') {
       return safe({
-        allowedDomains: [/gnosis-safe.io$/, /app.safe.global$/, /dhedge.org$/],
+        allowedDomains: [/gnosis-safe.io$/, /app.safe.global$/, /chamberfi.com$/],
       });
     } else {
       return connector;
     }
   })
   .sort((a, b) => {
-    // sort connectors so the family connector is last
+    // sort connectors so the aave account connector is last
     // fixes slow wallet connections when running in the Safe UI
-    if (a(connectorConfig).id === familyConnectorId) {
+    if (a(connectorConfig).id === aaveConnectorId) {
       return 1;
     }
-    if (b(connectorConfig).id === familyConnectorId) {
+    if (b(connectorConfig).id === aaveConnectorId) {
       return -1;
     }
     return 0;
@@ -107,6 +107,11 @@ const connectors = prodCkConfig.connectors
 const prodConfig = createConfig({
   ...prodCkConfig,
   connectors,
+  // Next.js SSR mode: run wagmi's reconnect once on mount (guarded) instead of
+  // on every render. Without this, WagmiProvider re-fires reconnect() on each
+  // render, ping-ponging account status and re-rendering the tree on navigation.
+  // Auto-reconnect for returning wallets is preserved.
+  ssr: true,
 });
 
 const isCypressEnabled = process.env.NEXT_PUBLIC_IS_CYPRESS_ENABLED === 'true';

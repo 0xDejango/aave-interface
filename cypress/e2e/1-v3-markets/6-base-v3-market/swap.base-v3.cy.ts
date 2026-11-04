@@ -1,10 +1,11 @@
+import { RequestedTokens, tokenSet } from 'cypress/support/helpers/token.helper';
+
 import assets from '../../../fixtures/assets.json';
 import constants from '../../../fixtures/constans.json';
 import { skipState } from '../../../support/steps/common';
 import { configEnvWithTenderlyBaseFork } from '../../../support/steps/configuration.steps';
 import { swap } from '../../../support/steps/main.steps';
 import { dashboardAssetValuesVerification } from '../../../support/steps/verification.steps';
-import { RequestedTokens, tokenSet } from '../../4-gho-ethereum/helpers/token.helper';
 
 const tokensToRequest: RequestedTokens = {
   aETHBaseV3: 4,
@@ -43,7 +44,6 @@ const testData = {
 describe.skip('SWAP, BASE V3 MARKET, INTEGRATION SPEC', () => {
   const skipTestState = skipState(false);
   configEnvWithTenderlyBaseFork({
-    v3: true,
     tokens: tokenSet(tokensToRequest),
   });
   testData.swap.forEach((swapCase) => {

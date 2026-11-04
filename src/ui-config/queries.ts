@@ -1,3 +1,4 @@
+import { SwapProvider } from 'src/components/transactions/Swap/types';
 import { MigrationSupplyException } from 'src/store/v3MigrationSlice';
 
 import { MarketDataType } from './marketsConfig';
@@ -9,17 +10,19 @@ export const queryKeysFactory = {
   pool: ['pool'] as const,
   incentives: ['incentives'] as const,
   gho: ['gho'] as const,
+  umbrella: ['umbrella'] as const,
   market: (marketData: MarketDataType) => [
     marketData.chainId,
     !!marketData.isFork,
     marketData.market,
   ],
   user: (user: string) => [user],
-  powers: (user: string, chainId: number) => [
+  powers: (user: string, chainId: number, blockHash?: string) => [
     ...queryKeysFactory.governance,
     ...queryKeysFactory.user(user),
     chainId,
     'powers',
+    blockHash,
   ],
   voteOnProposal: (user: string, proposalId: number, marketData: MarketDataType) => [
     ...queryKeysFactory.governance,
@@ -45,6 +48,41 @@ export const queryKeysFactory = {
     ...queryKeysFactory.user(user),
     ...queryKeysFactory.market(marketData),
     'governanceTokens',
+  ],
+  governanceCache: ['governance', 'cache'] as const,
+  governanceCacheProposals: (stateFilter?: string) => [
+    ...queryKeysFactory.governanceCache,
+    'proposals',
+    stateFilter ?? 'all',
+  ],
+  governanceCacheSearch: (query: string) => [...queryKeysFactory.governanceCache, 'search', query],
+  governanceCacheProposalDetail: (proposalId: number, user?: string) => [
+    ...queryKeysFactory.governanceCache,
+    'detail',
+    proposalId,
+    user ?? 'anonymous',
+  ],
+  governanceCacheVotes: (proposalId: number, support?: boolean) => [
+    ...queryKeysFactory.governanceCache,
+    'votes',
+    proposalId,
+    support ?? 'all',
+  ],
+  governanceCachePayloads: (proposalId: number) => [
+    ...queryKeysFactory.governanceCache,
+    'payloads',
+    proposalId,
+  ],
+  governanceCacheVotingConfig: (accessLevel: number) => [
+    ...queryKeysFactory.governanceCache,
+    'voting-config',
+    accessLevel,
+  ],
+  governanceCacheVotersEns: (proposalId: number, addresses: string[]) => [
+    ...queryKeysFactory.governanceCache,
+    'voters-ens',
+    proposalId,
+    ...addresses,
   ],
   transactionHistory: (user: string, marketData: MarketDataType) => [
     ...queryKeysFactory.user(user),
@@ -88,13 +126,26 @@ export const queryKeysFactory = {
     oracles,
     'userStakeUiData',
   ],
-  paraswapRates: (
+  swapQuote: (
     chainId: number,
+    provider: SwapProvider,
     amount: string,
+    requiresQuoteInverted: boolean,
     srcToken: string,
     destToken: string,
-    user: string
-  ) => [...queryKeysFactory.user(user), chainId, amount, srcToken, destToken, 'paraswapRates'],
+    user: string,
+    market?: string
+  ) => [
+    ...queryKeysFactory.user(user),
+    chainId,
+    provider,
+    amount,
+    requiresQuoteInverted,
+    srcToken,
+    destToken,
+    market,
+    'swapQuote',
+  ],
   gasPrices: (chainId: number) => [chainId, 'gasPrices'],
   poolReservesIncentiveDataHumanized: (marketData: MarketDataType) => [
     ...queryKeysFactory.pool,
@@ -146,10 +197,10 @@ export const queryKeysFactory = {
     chainId,
     'tokenDelegatees',
   ],
-  getGhoBridgeBalances: (user: string, marketData: MarketDataType) => [
+  getGhoBridgeBalances: (user: string, chainId: number) => [
     ...queryKeysFactory.gho,
     ...queryKeysFactory.user(user),
-    ...queryKeysFactory.market(marketData),
+    chainId,
     'getGhoBridgeBalances',
   ],
   migrationExceptions: (
@@ -171,6 +222,17 @@ export const queryKeysFactory = {
     ...queryKeysFactory.pool,
     ...queryKeysFactory.market(marketData),
     'poolEModes',
+  ],
+  umbrellaStakeData: (marketData: MarketDataType) => [
+    ...queryKeysFactory.umbrella,
+    ...queryKeysFactory.market(marketData),
+    'stakeData',
+  ],
+  umbrellaStakeUserData: (user: string, marketData: MarketDataType) => [
+    ...queryKeysFactory.umbrella,
+    ...queryKeysFactory.user(user),
+    ...queryKeysFactory.market(marketData),
+    'userStakeData',
   ],
 };
 

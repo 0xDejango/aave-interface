@@ -1,0 +1,138 @@
+import { Trans } from '@lingui/macro';
+import { Box, Button, Typography } from '@mui/material';
+import { useState } from 'react';
+import { ContentWithTooltip } from 'src/components/ContentWithTooltip';
+import { IncentivesIcon } from 'src/components/incentives/IncentivesButton';
+import { MeritIncentivesTooltipContent } from 'src/components/incentives/MeritIncentivesTooltipContent';
+import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
+import { TokenIcon } from 'src/components/primitives/TokenIcon';
+import { useMeritIncentives } from 'src/hooks/useMeritIncentives';
+import { useModalContext } from 'src/hooks/useModal';
+import { useSavingsMarketData } from 'src/hooks/useSavingsMarketData';
+import { CustomMarket } from 'src/ui-config/marketsConfig';
+import {
+  depositRowActionsSx,
+  depositRowActionSx,
+  depositRowButtonsSx,
+  depositRowSx,
+} from 'src/utils/buttonStyles';
+import { figVars } from 'src/utils/figmaColors';
+
+interface StkGhoDepositRowProps {
+  availableToStake: string;
+  onDeposit?: () => void;
+  onMigrate?: () => void;
+  hasLegacyPosition?: boolean;
+  stakedToken: string;
+}
+
+export const StkGhoDepositRow = ({
+  availableToStake,
+  onDeposit,
+  onMigrate,
+  hasLegacyPosition = false,
+  stakedToken,
+}: StkGhoDepositRowProps) => {
+  const { openSwitch } = useModalContext();
+  const { chainId: targetChainId } = useSavingsMarketData();
+
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const { data: meritIncentives } = useMeritIncentives({
+    symbol: 'GHO',
+    market: CustomMarket.proto_mainnet_v3,
+  });
+  const apr = meritIncentives ? +meritIncentives.incentiveAPR : 0;
+
+  const hasGho = +availableToStake > 0;
+
+  // When the user holds a legacy position, migration is the primary action:
+  // invert the emphasis so Migrate is contained and Deposit/Get GHO is outlined.
+  const depositVariant = hasLegacyPosition ? 'tertiary' : 'contained';
+  const migrateVariant = hasLegacyPosition ? 'contained' : 'tertiary';
+
+  const handleGetGho = () => {
+    openSwitch('', targetChainId);
+  };
+
+  const aprDisplay = (
+    <Box
+      sx={{
+        textAlign: 'left',
+        cursor: meritIncentives ? 'pointer' : 'default',
+      }}
+    >
+      <Typography variant="caption" color="fg-2" sx={{ display: 'block' }}>
+        <Trans>APR</Trans>
+      </Typography>
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        <FormattedNumber value={apr} percent variant="h4" visibleDecimals={2} />
+        {meritIncentives && <IncentivesIcon width="16" height="16" />}
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ ...depositRowSx, border: `1px solid ${figVars['border-0']}` }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+        <TokenIcon symbol="stkgho" sx={{ width: 36, height: 36 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subheader1" sx={{ lineHeight: 1.25 }}>
+            stkGHO
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="caption" color="fg-2">
+              <Trans>Available to deposit:</Trans>
+            </Typography>
+            <FormattedNumber
+              value={availableToStake}
+              variant="caption"
+              color="fg-2"
+              visibleDecimals={2}
+            />
+          </Box>
+        </Box>
+      </Box>
+
+      <Box sx={depositRowActionsSx}>
+        {meritIncentives ? (
+          <ContentWithTooltip
+            tooltipContent={
+              <MeritIncentivesTooltipContent
+                meritIncentives={meritIncentives}
+                onClose={() => setTooltipOpen(false)}
+              />
+            }
+            withoutHover
+            setOpen={setTooltipOpen}
+            open={tooltipOpen}
+          >
+            {aprDisplay}
+          </ContentWithTooltip>
+        ) : (
+          aprDisplay
+        )}
+
+        <Box sx={depositRowButtonsSx}>
+          <Button
+            variant={depositVariant}
+            onClick={hasGho ? onDeposit : handleGetGho}
+            sx={depositRowActionSx}
+            data-cy={`stakeBtn_${stakedToken.toUpperCase()}`}
+          >
+            {hasGho ? <Trans>Deposit</Trans> : <Trans>Get GHO</Trans>}
+          </Button>
+
+          <Button
+            variant={migrateVariant}
+            onClick={onMigrate}
+            disabled={!hasLegacyPosition}
+            sx={depositRowActionSx}
+            data-cy={`migrateBtn_${stakedToken.toUpperCase()}`}
+          >
+            <Trans>Migrate</Trans>
+          </Button>
+        </Box>
+      </Box>
+    </Box>
+  );
+};

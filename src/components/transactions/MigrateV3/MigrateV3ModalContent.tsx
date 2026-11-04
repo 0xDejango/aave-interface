@@ -1,5 +1,5 @@
 import { Trans } from '@lingui/macro';
-import { Box, Button } from '@mui/material';
+import { Button } from '@mui/material';
 import { useRouter } from 'next/router';
 import { useMemo } from 'react';
 import { UserMigrationReserves } from 'src/hooks/migration/useUserMigrationReserves';
@@ -115,19 +115,17 @@ export const MigrateV3ModalContent = ({
   if (migrateTxState.success) {
     return (
       <TxSuccessView
+        title={<Trans>Migrated Successfully</Trans>}
         customAction={
-          <Box mt={5}>
-            <Button variant="gradient" size="medium" onClick={handleGoToDashboard}>
-              <Trans>Go to V3 Dashboard</Trans>
-            </Button>
-          </Box>
+          <Button variant="outlined" size="medium" onClick={handleGoToDashboard}>
+            <Trans>Go to V3 Dashboard</Trans>
+          </Button>
         }
         customText={
           <Trans>
             Selected assets have successfully migrated. Visit the Market Dashboard to see them.
           </Trans>
         }
-        action={<Trans>Migrated</Trans>}
       />
     );
   }
@@ -136,7 +134,11 @@ export const MigrateV3ModalContent = ({
     <>
       <TxModalTitle title="Migrate to V3" />
       {isWrongNetwork && !readOnlyModeAddress && (
-        <ChangeNetworkWarning networkName={networkConfig.name} chainId={currentChainId} />
+        <ChangeNetworkWarning
+          autoSwitchOnMount={true}
+          networkName={networkConfig.name}
+          chainId={currentChainId}
+        />
       )}
 
       <TxModalDetails gasLimit={gasLimit}>

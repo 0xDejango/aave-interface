@@ -1,6 +1,6 @@
-import { ExternalLinkIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
-import { Box, SvgIcon, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { ReserveFactorTooltip } from 'src/components/infoTooltips/ReserveFactorTooltip';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
 import { Link } from 'src/components/primitives/Link';
@@ -58,7 +58,7 @@ export const ReserveFactorOverview = ({
           />
         }
       >
-        <FormattedNumber value={reserveFactor} percent variant="secondary14" visibleDecimals={2} />
+        <FormattedNumber value={reserveFactor} percent variant="h5" visibleDecimals={2} />
       </ReserveOverviewBox>
 
       <ReserveOverviewBox
@@ -82,12 +82,10 @@ export const ReserveFactorOverview = ({
           sx={{ textDecoration: 'none' }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="description" color="text.secondary">
+            <Typography variant="description" color="fg-2">
               <Trans>View contract</Trans>
             </Typography>
-            <SvgIcon sx={{ ml: 1, fontSize: 14 }}>
-              <ExternalLinkIcon />
-            </SvgIcon>
+            <ArrowUpRightIcon sx={{ ml: 1, fontSize: 14 }} />
           </Box>
         </Link>
       </ReserveOverviewBox>

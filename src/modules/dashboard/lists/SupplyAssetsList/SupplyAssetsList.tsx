@@ -1,18 +1,24 @@
 import { API_ETH_MOCK_ADDRESS } from '@aave/contract-helpers';
 import { USD_DECIMALS, valueToBigNumber } from '@aave/math-utils';
 import { Trans } from '@lingui/macro';
-import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, Box, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { BigNumber } from 'bignumber.js';
 import { Fragment, useState } from 'react';
+import { AssetCategoryMultiSelect } from 'src/components/AssetCategoryMultiselect';
+import { LIST_CARDS_BELOW } from 'src/components/lists/listBreakpoints';
 import { ListColumn } from 'src/components/lists/ListColumn';
 import { ListHeaderTitle } from 'src/components/lists/ListHeaderTitle';
 import { ListHeaderWrapper } from 'src/components/lists/ListHeaderWrapper';
-import { Warning } from 'src/components/primitives/Warning';
+import { isFunSupplyAsset } from 'src/components/transactions/FunCheckout/funSupplyAssets';
 import { AssetCapsProvider } from 'src/hooks/useAssetCaps';
+import { useCoingeckoCategories } from 'src/hooks/useCoinGeckoCategories';
 import { useWrappedTokens } from 'src/hooks/useWrappedTokens';
+import { AssetCategory, isAssetInCategoryDynamic } from 'src/modules/markets/utils/assetCategories';
 import { useRootStore } from 'src/store/root';
 import { fetchIconSymbolAndName } from 'src/ui-config/reservePatches';
+import { DASHBOARD } from 'src/utils/events';
 import { displayGhoForMintableMarket } from 'src/utils/ghoUtilities';
+import { ENABLE_TESTNET, STAGING_ENV } from 'src/utils/marketsAndNetworksConfig';
 
 import { ListWrapper } from '../../../../components/lists/ListWrapper';
 import { Link, ROUTES } from '../../../../components/primitives/Link';
@@ -27,6 +33,7 @@ import {
   handleSortDashboardReserves,
 } from '../../../../utils/dashboardSortUtils';
 import { DashboardListTopPanel } from '../../DashboardListTopPanel';
+import { isAssetHidden } from '../constants';
 import { ListButtonsColumn } from '../ListButtonsColumn';
 import { ListLoader } from '../ListLoader';
 import { SupplyAssetsListItem } from './SupplyAssetsListItem';
@@ -34,7 +41,7 @@ import { WalletEmptyInfo } from './WalletEmptyInfo';
 
 const head = [
   { title: <Trans key="assets">Assets</Trans>, sortKey: 'symbol' },
-  { title: <Trans key="Wallet balance">Wallet balance</Trans>, sortKey: 'walletBalance' },
+  { title: <Trans key="Balance">Balance</Trans>, sortKey: 'walletBalance' },
   { title: <Trans key="APY">APY</Trans>, sortKey: 'supplyAPY' },
   {
     title: <Trans key="Can be collateral">Can be collateral</Trans>,
@@ -43,6 +50,9 @@ const head = [
 ];
 
 export const SupplyAssetsList = () => {
+  const { data, isLoading, error } = useCoingeckoCategories();
+  const [selectedCategories, setSelectedCategories] = useState<AssetCategory[]>([]);
+
   const currentNetworkConfig = useRootStore((store) => store.currentNetworkConfig);
   const currentChainId = useRootStore((store) => store.currentChainId);
   const currentMarketData = useRootStore((store) => store.currentMarketData);
@@ -56,7 +66,7 @@ export const SupplyAssetsList = () => {
   const wrappedTokenReserves = useWrappedTokens();
   const { walletBalances, loading } = useWalletBalances(currentMarketData);
   const theme = useTheme();
-  const downToXSM = useMediaQuery(theme.breakpoints.down('xsm'));
+  const showCards = useMediaQuery(theme.breakpoints.down(LIST_CARDS_BELOW));
 
   const [sortName, setSortName] = useState('');
   const [sortDesc, setSortDesc] = useState(false);
@@ -67,13 +77,32 @@ export const SupplyAssetsList = () => {
   const [isShowZeroAssets, setIsShowZeroAssets] = useState(
     localStorage.getItem(localStorageName) === 'true'
   );
+  const listCollapseKey = 'supplyAssetsDashboardTableCollapse';
+  const [isListCollapsed, setIsListCollapsed] = useState(
+    localStorage.getItem(listCollapseKey) === 'true'
+  );
 
   const tokensToSupply = reserves
     .filter(
       (reserve: ComputedReserveData) =>
         !(reserve.isFrozen || reserve.isPaused) &&
-        !displayGhoForMintableMarket({ symbol: reserve.symbol, currentMarket })
+        !displayGhoForMintableMarket({ symbol: reserve.symbol, currentMarket }) &&
+        !isAssetHidden(currentMarketData.market, reserve.underlyingAsset)
     )
+    // filter by category
+    .filter(
+      (res) =>
+        selectedCategories.length === 0 ||
+        selectedCategories.some((category) =>
+          isAssetInCategoryDynamic(
+            res.symbol,
+            category,
+            data?.stablecoinSymbols,
+            data?.ethCorrelatedSymbols
+          )
+        )
+    )
+
     .map((reserve: ComputedReserveData) => {
       const walletBalance = walletBalances[reserve.underlyingAsset]?.amount;
       const walletBalanceUSD = walletBalances[reserve.underlyingAsset]?.amountUSD;
@@ -95,9 +124,14 @@ export const SupplyAssetsList = () => {
         (userRes) => userRes.usageAsCollateralEnabledOnUser && userRes.reserve.id !== reserve.id
       );
 
+      // Check if asset has non-zero liquidation threshold (base or in user's e-mode)
+      const userEMode = reserve.eModes?.find((e) => e.id === user?.userEmodeCategoryId);
+      const hasLiquidationThreshold =
+        reserve.reserveLiquidationThreshold !== '0' ||
+        (user?.isInEmode && userEMode?.collateralEnabled);
+
       const usageAsCollateralEnabledOnUser = !user?.isInIsolationMode
-        ? reserve.reserveLiquidationThreshold !== '0' &&
-          (!isIsolated || (isIsolated && !hasDifferentCollateral))
+        ? hasLiquidationThreshold && (!isIsolated || (isIsolated && !hasDifferentCollateral))
         : !isIsolated
         ? false
         : !hasDifferentCollateral;
@@ -169,7 +203,14 @@ export const SupplyAssetsList = () => {
   );
 
   const filteredSupplyReserves = sortedSupplyReserves.filter((reserve) => {
-    if (reserve.availableToDepositUSD !== '0') {
+    // fun-routed assets can be supplied from any EVM asset / fiat via the funkit
+    // checkout, so an empty wallet must not hide them.
+    if (isFunSupplyAsset(currentMarket, reserve.underlyingAsset)) {
+      return true;
+    }
+
+    // Filter out dust amounts < $0.01 USD
+    if (reserve.availableToDepositUSD !== '0' && Number(reserve.availableToDepositUSD) >= 0.01) {
       return true;
     }
 
@@ -182,7 +223,10 @@ export const SupplyAssetsList = () => {
     }
 
     // The asset can be supplied if the user has a 'token in' balance, (DAI as sDAI for example)
-    return walletBalances[wrappedTokenConfig.tokenIn.underlyingAsset]?.amount !== '0';
+    const wrappedBalance = walletBalances[wrappedTokenConfig.tokenIn.underlyingAsset]?.amount;
+    const wrappedBalanceUSD = walletBalances[wrappedTokenConfig.tokenIn.underlyingAsset]?.amountUSD;
+
+    return wrappedBalance !== '0' && Number(wrappedBalanceUSD || '0') >= 0.01;
   });
 
   // Filter out reserves
@@ -204,7 +248,7 @@ export const SupplyAssetsList = () => {
   const RenderHeader: React.FC = () => {
     return (
       <ListHeaderWrapper>
-        {head.map((col) => (
+        {head.map((col, index) => (
           <ListColumn
             isRow={col.sortKey === 'symbol'}
             maxWidth={col.sortKey === 'symbol' ? DASHBOARD_LIST_COLUMN_WIDTHS.ASSET : undefined}
@@ -218,12 +262,13 @@ export const SupplyAssetsList = () => {
               setSortDesc={setSortDesc}
               sortKey={col.sortKey}
               source="Supplies Dashbaord"
+              noTruncate={index === head.length - 1}
             >
               {col.title}
             </ListHeaderTitle>
           </ListColumn>
         ))}
-        <ListButtonsColumn isColumnHeader />
+        <ListButtonsColumn />
       </ListHeaderWrapper>
     );
   };
@@ -242,53 +287,87 @@ export const SupplyAssetsList = () => {
   return (
     <ListWrapper
       titleComponent={
-        <Typography component="div" variant="h3" sx={{ mr: 4 }}>
-          <Trans>Assets to supply</Trans>
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            width: '100%',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mr: '0.62rem',
+          }}
+        >
+          <Typography component="div" variant="h3" sx={{ flex: '0 0 auto', mr: 2 }}>
+            <Trans>Assets to supply</Trans>
+          </Typography>
+
+          {!isListCollapsed && (
+            <AssetCategoryMultiSelect
+              selectedCategories={selectedCategories}
+              onCategoriesChange={setSelectedCategories}
+              disabled={isLoading || !!error}
+            />
+          )}
+        </Box>
       }
+      onCollapseChange={setIsListCollapsed}
       localStorageName="supplyAssetsDashboardTableCollapse"
       withTopMargin
       noData={supplyDisabled}
       subChildrenComponent={
         <>
-          <Box sx={{ px: 6 }}>
+          <Box>
             {user?.isInIsolationMode ? (
-              <Warning severity="warning">
+              <Alert severity="warning" data-size="small" sx={{ mb: 6, width: '100%' }}>
                 <Trans>
                   Collateral usage is limited because of isolation mode.{' '}
                   <Link href="https://docs.aave.com/faq/" target="_blank" rel="noopener">
                     Learn More
                   </Link>
                 </Trans>
-              </Warning>
+              </Alert>
             ) : (
               filteredSupplyReserves.length === 0 &&
+              !supplyDisabled &&
               (isTestnet ? (
-                <Warning severity="info">
+                <Alert severity="info" data-size="small" sx={{ mb: 6, width: '100%' }}>
                   <Trans>Your {networkName} wallet is empty. Get free test assets at </Trans>{' '}
-                  <Link href={ROUTES.faucet} style={{ fontWeight: 400 }}>
+                  <Link href={ROUTES.faucet}>
                     <Trans>{networkName} Faucet</Trans>
                   </Link>
-                </Warning>
+                </Alert>
               ) : (
                 <WalletEmptyInfo name={networkName} bridge={bridge} chainId={currentChainId} />
               ))
             )}
+            {supplyDisabled && (
+              <Alert severity="info" data-size="small" sx={{ mb: 6, width: '100%' }}>
+                <Trans>
+                  We couldn&apos;t find any assets related to your search. Try again with a
+                  different category.
+                </Trans>
+              </Alert>
+            )}
           </Box>
 
           {filteredSupplyReserves.length >= 1 && (
-            <DashboardListTopPanel
-              value={isShowZeroAssets}
-              onClick={setIsShowZeroAssets}
-              localStorageName={localStorageName}
-              bridge={bridge}
-            />
+            <>
+              <DashboardListTopPanel
+                value={isShowZeroAssets}
+                onClick={setIsShowZeroAssets}
+                localStorageName={localStorageName}
+                bridge={bridge}
+                eventName={DASHBOARD.SHOW_ASSETS_0_BALANCE}
+                label={<Trans>Show assets with 0 balance</Trans>}
+                showFaucet={STAGING_ENV || ENABLE_TESTNET}
+                showBridge={!ENABLE_TESTNET}
+              />
+            </>
           )}
         </>
       }
     >
       <>
-        {!downToXSM && !!sortedReserves && !supplyDisabled && <RenderHeader />}
+        {!showCards && !!sortedReserves && !supplyDisabled && <RenderHeader />}
         {sortedReserves.map((item) => (
           <Fragment key={item.underlyingAsset}>
             <AssetCapsProvider asset={item.reserve}>

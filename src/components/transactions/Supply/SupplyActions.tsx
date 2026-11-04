@@ -1,10 +1,17 @@
-import { gasLimitRecommendations, ProtocolAction } from '@aave/contract-helpers';
+import {
+  API_ETH_MOCK_ADDRESS,
+  gasLimitRecommendations,
+  ProtocolAction,
+} from '@aave/contract-helpers';
+import { valueToBigNumber } from '@aave/math-utils';
 import { TransactionResponse } from '@ethersproject/providers';
 import { Trans } from '@lingui/macro';
 import { BoxProps } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
-import { parseUnits } from 'ethers/lib/utils';
+import { Contract, PopulatedTransaction } from 'ethers';
+import { parseUnits, splitSignature } from 'ethers/lib/utils';
 import React, { useEffect, useState } from 'react';
+import { useAppDataContext } from 'src/hooks/app-data-provider/useAppDataProvider';
 import { SignedParams, useApprovalTx } from 'src/hooks/useApprovalTx';
 import { usePoolApprovedAmount } from 'src/hooks/useApprovedAmount';
 import { useModalContext } from 'src/hooks/useModal';
@@ -18,6 +25,14 @@ import { useShallow } from 'zustand/shallow';
 import { TxActionsWrapper } from '../TxActionsWrapper';
 import { APPROVAL_GAS_LIMIT, checkRequiresApproval } from '../utils';
 
+// Minimal ABI for Pool multicall + setUserEMode + supply
+const POOL_MULTICALL_ABI = [
+  'function multicall(bytes[] calldata data) external returns (bytes[] memory results)',
+  'function setUserEMode(uint8 categoryId)',
+  'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
+  'function supplyWithPermit(address asset, uint256 amount, address onBehalfOf, uint16 referralCode, uint256 deadline, uint8 v, bytes32 r, bytes32 s)',
+];
+
 export interface SupplyActionProps extends BoxProps {
   amountToSupply: string;
   isWrongNetwork: boolean;
@@ -27,6 +42,9 @@ export interface SupplyActionProps extends BoxProps {
   blocked: boolean;
   decimals: number;
   isWrappedBaseAsset: boolean;
+  setShowUSDTResetWarning?: (showUSDTResetWarning: boolean) => void;
+  chainId?: number;
+  selectedEmodeId?: number;
 }
 
 export const SupplyActions = React.memo(
@@ -39,12 +57,16 @@ export const SupplyActions = React.memo(
     blocked,
     decimals,
     isWrappedBaseAsset,
+    setShowUSDTResetWarning,
+    chainId,
+    selectedEmodeId,
     ...props
   }: SupplyActionProps) => {
     const [
       tryPermit,
       supply,
       supplyWithPermit,
+      setUserEMode,
       walletApprovalMethodPreference,
       estimateGasLimit,
       addTransaction,
@@ -54,12 +76,14 @@ export const SupplyActions = React.memo(
         state.tryPermit,
         state.supply,
         state.supplyWithPermit,
+        state.setUserEMode,
         state.walletApprovalMethodPreference,
         state.estimateGasLimit,
         state.addTransaction,
         state.currentMarketData,
       ])
     );
+    const { reserves } = useAppDataContext();
     const {
       approvalTxState,
       mainTxState,
@@ -101,7 +125,7 @@ export const SupplyActions = React.memo(
 
     const usePermit = permitAvailable && walletApprovalMethodPreference === ApprovalMethod.PERMIT;
 
-    const { approval } = useApprovalTx({
+    const { approval, requiresApprovalReset } = useApprovalTx({
       usePermit,
       approvedAmount,
       requiresApproval,
@@ -111,6 +135,8 @@ export const SupplyActions = React.memo(
       signatureAmount: amountToSupply,
       onApprovalTxConfirmed: fetchApprovedAmount,
       onSignTxCompleted: (signedParams) => setSignatureParams(signedParams),
+      chainId,
+      setShowUSDTResetWarning,
     });
 
     useEffect(() => {
@@ -132,8 +158,12 @@ export const SupplyActions = React.memo(
           supplyGasLimit += Number(APPROVAL_GAS_LIMIT);
         }
       }
+      // Add gas for setUserEMode if bundling e-mode switch
+      if (selectedEmodeId !== undefined) {
+        supplyGasLimit += 100000;
+      }
       setGasLimit(supplyGasLimit.toString());
-    }, [requiresApproval, approvalTxState, usePermit, setGasLimit]);
+    }, [requiresApproval, approvalTxState, usePermit, setGasLimit, selectedEmodeId]);
 
     const action = async () => {
       try {
@@ -142,9 +172,72 @@ export const SupplyActions = React.memo(
         let response: TransactionResponse;
         let action = ProtocolAction.default;
 
-        // determine if approval is signature or transaction
-        // checking user preference is not sufficient because permit may be available but the user has an existing approval
-        if (usePermit && signatureParams) {
+        const needsEmodeSwitch = selectedEmodeId !== undefined;
+        const isNativeAsset = poolAddress.toLowerCase() === API_ETH_MOCK_ADDRESS.toLowerCase();
+
+        if (needsEmodeSwitch) {
+          if (isNativeAsset) {
+            // Native ETH goes through WETH Gateway which is a separate contract —
+            // can't bundle with Pool.multicall. Send setUserEMode first, then supply.
+            const eModeTxs = await setUserEMode(selectedEmodeId);
+            const eModeTx = await eModeTxs[0].tx();
+            const eModeTxWithGas = await estimateGasLimit(eModeTx as PopulatedTransaction);
+            const eModeResponse = await sendTx(eModeTxWithGas);
+            await eModeResponse.wait(1);
+
+            action = ProtocolAction.supply;
+            let supplyTxData = supply({
+              amount: parseUnits(amountToSupply, decimals).toString(),
+              reserve: poolAddress,
+            });
+            supplyTxData = await estimateGasLimit(supplyTxData);
+            response = await sendTx(supplyTxData);
+            await response.wait(1);
+          } else {
+            // ERC20: Bundle setUserEMode + supply via Pool multicall
+            const poolContractAddress = currentMarketData.addresses.LENDING_POOL;
+            const poolInterface = new Contract(poolContractAddress, POOL_MULTICALL_ABI).interface;
+            const currentAccount = useRootStore.getState().account;
+
+            const setEModeCalldata = poolInterface.encodeFunctionData('setUserEMode', [
+              selectedEmodeId,
+            ]);
+
+            let supplyCalldata: string;
+            if (usePermit && signatureParams) {
+              action = ProtocolAction.supplyWithPermit;
+              const sig = splitSignature(signatureParams.signature);
+              supplyCalldata = poolInterface.encodeFunctionData('supplyWithPermit', [
+                poolAddress,
+                parseUnits(amountToSupply, decimals).toString(),
+                currentAccount,
+                0,
+                signatureParams.deadline,
+                sig.v,
+                sig.r,
+                sig.s,
+              ]);
+            } else {
+              action = ProtocolAction.supply;
+              supplyCalldata = poolInterface.encodeFunctionData('supply', [
+                poolAddress,
+                parseUnits(amountToSupply, decimals).toString(),
+                currentAccount,
+                0,
+              ]);
+            }
+
+            let multicallTxData = await new Contract(
+              poolContractAddress,
+              POOL_MULTICALL_ABI
+            ).populateTransaction.multicall([setEModeCalldata, supplyCalldata]);
+            multicallTxData = { ...multicallTxData, from: currentAccount };
+            multicallTxData = await estimateGasLimit(multicallTxData);
+            response = await sendTx(multicallTxData);
+            await response.wait(1);
+          }
+        } else if (usePermit && signatureParams) {
+          // Standard supply with permit (no e-mode switch)
           action = ProtocolAction.supplyWithPermit;
           let signedSupplyWithPermitTxData = supplyWithPermit({
             signature: signatureParams.signature,
@@ -158,6 +251,7 @@ export const SupplyActions = React.memo(
 
           await response.wait(1);
         } else {
+          // Standard supply (no e-mode switch)
           action = ProtocolAction.supply;
           let supplyTxData = supply({
             amount: parseUnits(amountToSupply, decimals).toString(),
@@ -181,6 +275,12 @@ export const SupplyActions = React.memo(
           asset: poolAddress,
           amount: amountToSupply,
           assetName: symbol,
+          amountUsd: (() => {
+            const reserve = reserves.find((r) => r.underlyingAsset === poolAddress);
+            return reserve
+              ? valueToBigNumber(amountToSupply).multipliedBy(reserve.priceInUSD).toString()
+              : undefined;
+          })(),
         });
 
         queryClient.invalidateQueries({ queryKey: queryKeysFactory.pool });
@@ -212,6 +312,7 @@ export const SupplyActions = React.memo(
         tryPermit={permitAvailable}
         sx={sx}
         {...props}
+        requiresApprovalReset={requiresApprovalReset}
       />
     );
   }

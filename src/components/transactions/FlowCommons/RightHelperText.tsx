@@ -1,7 +1,7 @@
-import { ExternalLinkIcon } from '@heroicons/react/outline';
 import { Trans } from '@lingui/macro';
-import { Box, Link, SvgIcon, Typography } from '@mui/material';
+import { Box, Link, Typography } from '@mui/material';
 import { useEffect } from 'react';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { ApprovalMethodToggleButton } from 'src/components/transactions/FlowCommons/ApprovalMethodToggleButton';
 import { MOCK_SIGNED_HASH } from 'src/helpers/useTransactionHandler';
 import { useIsContractAddress } from 'src/hooks/useIsContractAddress';
@@ -9,18 +9,21 @@ import { useRootStore } from 'src/store/root';
 import { ApprovalMethod } from 'src/store/walletSlice';
 import { useShallow } from 'zustand/shallow';
 
+import { PermitNonceInfo } from './PermitNonceInfo';
+
 export type RightHelperTextProps = {
   approvalHash?: string;
   tryPermit?: boolean;
+  permitInUse?: boolean;
 };
 
-const ExtLinkIcon = () => (
-  <SvgIcon sx={{ ml: '2px', fontSize: '11px' }}>
-    <ExternalLinkIcon />
-  </SvgIcon>
-);
+const ExtLinkIcon = () => <ArrowUpRightIcon sx={{ ml: '2px', fontSize: '11px' }} />;
 
-export const RightHelperText = ({ approvalHash, tryPermit }: RightHelperTextProps) => {
+export const RightHelperText = ({
+  approvalHash,
+  tryPermit,
+  permitInUse = false,
+}: RightHelperTextProps) => {
   const [
     account,
     walletApprovalMethodPreference,
@@ -51,14 +54,21 @@ export const RightHelperText = ({ approvalHash, tryPermit }: RightHelperTextProp
   // a signature is not submitted on-chain so there is no link to review
   if (!approvalHash && !isSigned && tryPermit)
     return (
-      <Box sx={{ display: 'inline-flex', alignItems: 'center', mb: 2 }}>
-        <Typography variant="subheader2" color="text.secondary">
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', mb: 2, flexShrink: 0 }}>
+        <Typography variant="subheader2" color="fg-2" sx={{ whiteSpace: 'nowrap' }}>
           <Trans>Approve with</Trans>&nbsp;
         </Typography>
         <ApprovalMethodToggleButton
           currentMethod={walletApprovalMethodPreference}
           setMethod={(method: ApprovalMethod) => setWalletApprovalMethodPreference(method)}
         />
+      </Box>
+    );
+  // When permit use is disabled by the flow, inform the user why
+  if (!tryPermit && permitInUse)
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+        <PermitNonceInfo />
       </Box>
     );
   if (approvalHash && !usingPermit)

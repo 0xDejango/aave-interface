@@ -1,54 +1,55 @@
 import { t } from '@lingui/macro';
-import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { ReactNode } from 'react';
 
 type NoSearchResultsProps = {
   searchTerm?: string;
+  /** Overrides the default search-term headline, for lists that are empty for another reason. */
+  title?: ReactNode;
   subtitle?: ReactNode;
+  /** Optional action under the description (e.g. a "Reset filters" button). */
+  children?: ReactNode;
 };
 
-export const NoSearchResults: React.FC<NoSearchResultsProps> = ({ searchTerm, subtitle }) => {
-  const { breakpoints } = useTheme();
-  const sm = useMediaQuery(breakpoints.down('sm'));
-
+export const NoSearchResults: React.FC<NoSearchResultsProps> = ({
+  searchTerm,
+  title,
+  subtitle,
+  children,
+}) => {
   return (
     <Box
       sx={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 1,
-        pt: 15,
-        pb: 32,
+        gap: '0.5rem',
+        width: '100%',
+        py: 15,
         px: 4,
       }}
     >
-      {sm ? (
-        <Box sx={{ textAlign: 'center', maxWidth: '300px' }}>
-          <Typography variant="h2">{t`No search results${searchTerm && ' for'}`}</Typography>
-          {searchTerm && (
-            <Typography sx={{ overflowWrap: 'anywhere' }} variant="h2">
-              &apos;{searchTerm}&apos;
-            </Typography>
-          )}
-        </Box>
-      ) : (
-        <Typography
-          sx={{ textAlign: 'center', maxWidth: '480px', overflowWrap: 'anywhere' }}
-          variant="h2"
-        >
-          {t`No search results${searchTerm && ` for \'${searchTerm}\'`}`}
-        </Typography>
-      )}
+      {/* Title: H5, fg-max, centered; a long keyword ellipsizes rather than wrapping. */}
+      <Typography variant="h5" color="fg-max" noWrap sx={{ textAlign: 'center', maxWidth: '100%' }}>
+        {title ??
+          (searchTerm ? t`No search results for` + ` '${searchTerm}'` : t`No search results`)}
+      </Typography>
+      {/* Description: fg-3 "Paragraph" (0.875rem / 400 / 1.1875rem), supplied per search context. */}
       {subtitle && (
         <Typography
-          sx={{ width: '280px', textAlign: 'center' }}
           variant="description"
-          color="text.secondary"
+          color="fg-3"
+          sx={{
+            textAlign: 'center',
+            maxWidth: '280px',
+            lineHeight: '1.1875rem',
+            letterSpacing: 'normal',
+          }}
         >
           {subtitle}
         </Typography>
       )}
+      {children && <Box sx={{ mt: '1rem' }}>{children}</Box>}
     </Box>
   );
 };

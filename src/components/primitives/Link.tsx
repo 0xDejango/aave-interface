@@ -1,6 +1,6 @@
 import MuiLink, { LinkProps as MuiLinkProps } from '@mui/material/Link';
 import { styled } from '@mui/material/styles';
-import clsx from 'clsx';
+import { clsx } from 'clsx';
 import NextLink, { LinkProps as NextLinkProps } from 'next/link';
 import { useRouter } from 'next/router';
 import * as React from 'react';
@@ -38,6 +38,7 @@ export const NextLinkComposed = React.forwardRef<HTMLAnchorElement, NextLinkComp
         shallow={shallow}
         passHref
         locale={locale}
+        legacyBehavior
       >
         <Anchor ref={ref} {...other} />
       </NextLink>
@@ -53,6 +54,9 @@ export type LinkProps = {
 } & Omit<NextLinkComposedProps, 'to' | 'linkAs' | 'href'> &
   Omit<MuiLinkProps, 'href'>;
 
+export const isExternalHref = (href: string) =>
+  href.indexOf('http') === 0 || href.indexOf('mailto:') === 0;
+
 // A styled version of the Next.js Link component:
 // https://nextjs.org/docs/#with-link
 export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(function Link(props, ref) {
@@ -65,8 +69,7 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(function Link
     ...other
   } = props;
 
-  const isExternal =
-    typeof href === 'string' && (href.indexOf('http') === 0 || href.indexOf('mailto:') === 0);
+  const isExternal = typeof href === 'string' && isExternalHref(href);
 
   const router = useRouter();
   const pathname = typeof href === 'string' ? href : href.pathname;
@@ -121,7 +124,7 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(function Link
 });
 
 export const ROUTES = {
-  dashboard: '/',
+  dashboard: '/dashboard',
   markets: '/markets',
   staking: '/staking',
   governance: '/governance',
@@ -134,4 +137,6 @@ export const ROUTES = {
     `/reserve-overview/?underlyingAsset=${underlyingAsset}&marketName=${marketName}`,
   history: '/history',
   bridge: '/bridge',
+  safetyModule: '/safety-module',
+  sGHO: '/sgho',
 };

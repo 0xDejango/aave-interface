@@ -1,21 +1,21 @@
 import { API_ETH_MOCK_ADDRESS } from '@aave/contract-helpers';
 import { USD_DECIMALS, valueToBigNumber } from '@aave/math-utils';
 import { Trans } from '@lingui/macro';
-import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, Box, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { Fragment, useState } from 'react';
+import { AssetCategoryMultiSelect } from 'src/components/AssetCategoryMultiselect';
 import { VariableAPYTooltip } from 'src/components/infoTooltips/VariableAPYTooltip';
+import { LIST_CARDS_BELOW } from 'src/components/lists/listBreakpoints';
 import { ListColumn } from 'src/components/lists/ListColumn';
 import { ListHeaderTitle } from 'src/components/lists/ListHeaderTitle';
 import { ListHeaderWrapper } from 'src/components/lists/ListHeaderWrapper';
-import { Warning } from 'src/components/primitives/Warning';
 import { AssetCapsProvider } from 'src/hooks/useAssetCaps';
+import { useCoingeckoCategories } from 'src/hooks/useCoinGeckoCategories';
+import { AssetCategory, isAssetInCategoryDynamic } from 'src/modules/markets/utils/assetCategories';
 import { useRootStore } from 'src/store/root';
 import { fetchIconSymbolAndName } from 'src/ui-config/reservePatches';
 import { GENERAL } from 'src/utils/events';
-import {
-  displayGhoForMintableMarket,
-  findAndFilterMintableGhoReserve,
-} from 'src/utils/ghoUtilities';
+import { displayGhoForMintableMarket } from 'src/utils/ghoUtilities';
 import { useShallow } from 'zustand/shallow';
 
 import { CapType } from '../../../../components/caps/helper';
@@ -35,11 +35,11 @@ import {
   assetCanBeBorrowedByUser,
   getMaxAmountAvailableToBorrow,
 } from '../../../../utils/getMaxAmountAvailableToBorrow';
+import { isAssetHidden } from '../constants';
 import { ListButtonsColumn } from '../ListButtonsColumn';
 import { ListLoader } from '../ListLoader';
 import { BorrowAssetsListItem } from './BorrowAssetsListItem';
 import { BorrowAssetsListMobileItem } from './BorrowAssetsListMobileItem';
-import { GhoBorrowAssetsListItem } from './GhoBorrowAssetsListItem';
 
 const head = [
   {
@@ -79,19 +79,42 @@ const head = [
 ];
 
 export const BorrowAssetsList = () => {
-  const [currentNetworkConfig, currentMarket] = useRootStore(
-    useShallow((store) => [store.currentNetworkConfig, store.currentMarket])
+  const { data, isLoading, error } = useCoingeckoCategories();
+  const [selectedCategories, setSelectedCategories] = useState<AssetCategory[]>([]);
+
+  const [currentNetworkConfig, currentMarketData] = useRootStore(
+    useShallow((store) => [store.currentNetworkConfig, store.currentMarketData])
   );
+  const currentMarket = currentMarketData.market;
   const { user, reserves, marketReferencePriceInUsd, loading } = useAppDataContext();
   const theme = useTheme();
-  const downToXSM = useMediaQuery(theme.breakpoints.down('xsm'));
+  const showCards = useMediaQuery(theme.breakpoints.down(LIST_CARDS_BELOW));
   const [sortName, setSortName] = useState('');
   const [sortDesc, setSortDesc] = useState(false);
+
+  const listCollapseKey = 'borrowAssetsDashboardTableCollapse';
+  const [isListCollapsed, setIsListCollapsed] = useState(
+    localStorage.getItem(listCollapseKey) === 'true'
+  );
 
   const { baseAssetSymbol } = currentNetworkConfig;
 
   const tokensToBorrow = reserves
     .filter((reserve) => (user ? assetCanBeBorrowedByUser(reserve, user) : false))
+    .filter((reserve) => !isAssetHidden(currentMarketData.market, reserve.underlyingAsset))
+    // filter by category
+    .filter(
+      (res) =>
+        selectedCategories.length === 0 ||
+        selectedCategories.some((category) =>
+          isAssetInCategoryDynamic(
+            res.symbol,
+            category,
+            data?.stablecoinSymbols,
+            data?.ethCorrelatedSymbols
+          )
+        )
+    )
     .map((reserve: ComputedReserveData) => {
       const availableBorrows = user ? Number(getMaxAmountAvailableToBorrow(reserve, user)) : 0;
 
@@ -107,7 +130,7 @@ export const BorrowAssetsList = () => {
         totalBorrows: reserve.totalDebt,
         availableBorrows,
         availableBorrowsInUSD,
-        variableBorrowRate: reserve.borrowingEnabled ? Number(reserve.variableBorrowAPY) : -1,
+        variableBorrowRate: Number(reserve.variableBorrowAPY),
         iconSymbol: reserve.iconSymbol,
         ...(reserve.isWrappedBaseAsset
           ? fetchIconSymbolAndName({
@@ -138,22 +161,22 @@ export const BorrowAssetsList = () => {
           return availableBorrowsInUSD !== '0.00' && totalLiquidityUSD !== '0';
         });
 
-  const { value: ghoReserve, filtered: filteredReserves } = findAndFilterMintableGhoReserve(
-    borrowReserves,
-    currentMarket
-  );
   const sortedReserves = handleSortDashboardReserves(
     sortDesc,
     sortName,
     'asset',
-    filteredReserves as unknown as DashboardReserve[]
+    borrowReserves.sort((a, b) => {
+      if (displayGhoForMintableMarket({ symbol: a.symbol, currentMarket })) return -1;
+      if (displayGhoForMintableMarket({ symbol: b.symbol, currentMarket })) return 1;
+      return 0;
+    }) as unknown as DashboardReserve[]
   );
-  const borrowDisabled = !sortedReserves.length && !ghoReserve;
+  const borrowDisabled = !sortedReserves.length;
 
   const RenderHeader: React.FC = () => {
     return (
       <ListHeaderWrapper>
-        {head.map((col) => (
+        {head.map((col, index) => (
           <ListColumn
             isRow={col.sortKey === 'symbol'}
             maxWidth={col.sortKey === 'symbol' ? DASHBOARD_LIST_COLUMN_WIDTHS.ASSET : undefined}
@@ -166,12 +189,13 @@ export const BorrowAssetsList = () => {
               setSortDesc={setSortDesc}
               sortKey={col.sortKey}
               source={'Borrow Dashboard'}
+              noTruncate={index === head.length - 1}
             >
               {col.title}
             </ListHeaderTitle>
           </ListColumn>
         ))}
-        <ListButtonsColumn isColumnHeader />
+        <ListButtonsColumn />
       </ListHeaderWrapper>
     );
   };
@@ -188,74 +212,85 @@ export const BorrowAssetsList = () => {
   return (
     <ListWrapper
       titleComponent={
-        <Typography component="div" variant="h3" sx={{ mr: 4 }}>
-          <Trans>Assets to borrow</Trans>
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            width: '100%',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mr: '0.62rem',
+          }}
+        >
+          <Typography component="div" variant="h3" sx={{ flex: '0 0 auto', mr: 2 }}>
+            <Trans>Assets to borrow</Trans>
+          </Typography>
+
+          {!isListCollapsed && (
+            <AssetCategoryMultiSelect
+              selectedCategories={selectedCategories}
+              onCategoriesChange={setSelectedCategories}
+              disabled={isLoading || !!error}
+            />
+          )}
+        </Box>
       }
+      onCollapseChange={setIsListCollapsed}
       localStorageName="borrowAssetsDashboardTableCollapse"
       withTopMargin
       noData={borrowDisabled}
       subChildrenComponent={
-        <>
-          <Box sx={{ px: 6, mb: 4 }}>
-            {user?.healthFactor !== '-1' && Number(user?.healthFactor) <= 1.1 && (
-              <Warning severity="error">
-                <Trans>
-                  Be careful - You are very close to liquidation. Consider depositing more
-                  collateral or paying down some of your borrowed positions
-                </Trans>
-              </Warning>
-            )}
+        <Box>
+          {user?.healthFactor !== '-1' && Number(user?.healthFactor) <= 1.1 && (
+            <Alert severity="error" data-size="small" sx={{ mb: 6, width: '100%' }}>
+              <Trans>
+                Be careful - You are very close to liquidation. Consider depositing more collateral
+                or paying down some of your borrowed positions
+              </Trans>
+            </Alert>
+          )}
 
-            {!borrowDisabled && (
-              <>
-                {user?.isInIsolationMode && (
-                  <Warning severity="warning">
-                    <Trans>Borrowing power and assets are limited due to Isolation mode. </Trans>
-                    <Link href="https://docs.aave.com/faq/" target="_blank" rel="noopener">
-                      Learn More
-                    </Link>
-                  </Warning>
-                )}
-                {user?.isInEmode && (
-                  <Warning severity="warning">
-                    <Trans>
-                      In E-Mode some assets are not borrowable. Exit E-Mode to get access to all
-                      assets
-                    </Trans>
-                  </Warning>
-                )}
-                {user?.totalCollateralMarketReferenceCurrency === '0' && (
-                  <Warning severity="info">
-                    <Trans>To borrow you need to supply any asset to be used as collateral.</Trans>
-                  </Warning>
-                )}
-              </>
-            )}
-          </Box>
-          {ghoReserve &&
-            !downToXSM &&
-            displayGhoForMintableMarket({ symbol: ghoReserve.symbol, currentMarket }) && (
-              <AssetCapsProvider asset={ghoReserve.reserve}>
-                <GhoBorrowAssetsListItem {...ghoReserve} />
-              </AssetCapsProvider>
-            )}
-        </>
+          {!borrowDisabled && (
+            <>
+              {user?.isInIsolationMode && (
+                <Alert severity="warning" data-size="small" sx={{ mb: 6, width: '100%' }}>
+                  <Trans>Borrowing power and assets are limited due to Isolation mode. </Trans>
+                  <Link href="https://docs.aave.com/faq/" target="_blank" rel="noopener">
+                    Learn More
+                  </Link>
+                </Alert>
+              )}
+              {user?.isInEmode && (
+                <Alert severity="warning" data-size="small" sx={{ mb: 6, width: '100%' }}>
+                  <Trans>
+                    In E-Mode some assets are not borrowable. Exit E-Mode to get access to all
+                    assets
+                  </Trans>
+                </Alert>
+              )}
+              {user?.totalCollateralMarketReferenceCurrency === '0' && (
+                <Alert severity="info" data-size="small" sx={{ mb: 6, width: '100%' }}>
+                  <Trans>To borrow you need to supply any asset to be used as collateral.</Trans>
+                </Alert>
+              )}
+            </>
+          )}
+          {borrowDisabled && (
+            <Alert severity="info" data-size="small" sx={{ mb: 6, width: '100%' }}>
+              <Trans>
+                We couldn&apos;t find any assets related to your search. Try again with a different
+                category.
+              </Trans>
+            </Alert>
+          )}
+        </Box>
       }
     >
       <>
-        {!downToXSM && !!borrowReserves.length && <RenderHeader />}
-        {ghoReserve &&
-          downToXSM &&
-          displayGhoForMintableMarket({ symbol: ghoReserve.symbol, currentMarket }) && (
-            <AssetCapsProvider asset={ghoReserve.reserve}>
-              <GhoBorrowAssetsListItem {...ghoReserve} />
-            </AssetCapsProvider>
-          )}
+        {!showCards && !!borrowReserves.length && <RenderHeader />}
         {sortedReserves?.map((item) => (
           <Fragment key={item.underlyingAsset}>
             <AssetCapsProvider asset={item.reserve}>
-              {downToXSM ? (
+              {showCards ? (
                 <BorrowAssetsListMobileItem {...item} />
               ) : (
                 <BorrowAssetsListItem {...item} />

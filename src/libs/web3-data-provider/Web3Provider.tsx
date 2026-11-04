@@ -1,6 +1,7 @@
 import { API_ETH_MOCK_ADDRESS, ERC20Service, transactionType } from '@aave/contract-helpers';
 import { SignatureLike } from '@ethersproject/bytes';
 import { JsonRpcProvider, TransactionResponse } from '@ethersproject/providers';
+import { getAccount, watchAccount } from '@wagmi/core';
 import { BigNumber, PopulatedTransaction, utils } from 'ethers';
 import React, { ReactElement, useEffect, useState } from 'react';
 import { useIsContractAddress } from 'src/hooks/useIsContractAddress';
@@ -49,8 +50,12 @@ export const Web3ContextProvider: React.FC<{ children: ReactElement }> = ({ chil
 
   const [readOnlyModeAddress, setReadOnlyModeAddress] = useState<string | undefined>();
   const [switchNetworkError, setSwitchNetworkError] = useState<Error>();
-  const [setAccount, setConnectedAccountIsContract] = useRootStore(
-    useShallow((store) => [store.setAccount, store.setConnectedAccountIsContract])
+  const [setAccount, setConnectedAccountIsContract, setWalletType] = useRootStore(
+    useShallow((store) => [
+      store.setAccount,
+      store.setConnectedAccountIsContract,
+      store.setWalletType,
+    ])
   );
 
   const account = address;
@@ -96,10 +101,34 @@ export const Web3ContextProvider: React.FC<{ children: ReactElement }> = ({ chil
     if (provider) {
       const { from, ...data } = txData;
       const signer = provider.getSigner(from);
-      const txResponse: TransactionResponse = await signer.sendTransaction({
-        ...data,
-        value: data.value ? BigNumber.from(data.value) : undefined,
-      });
+      const txResponse: TransactionResponse = await signer
+        .sendTransaction({
+          ...data,
+          value: data.value ? BigNumber.from(data.value) : undefined,
+        })
+        .catch(async (error) => {
+          // Some wallets (MetaMask Delegation Framework, Safe) return tx responses
+          // that ethers v5 can't parse (e.g. undefined nonce). The tx was already
+          // sent successfully — recover by waiting for the receipt by hash.
+          if (error.code === 'INVALID_ARGUMENT' && error.transactionHash) {
+            const receipt = await provider.waitForTransaction(error.transactionHash);
+            if (receipt.status === 0) {
+              throw new Error('transaction failed');
+            }
+            return {
+              hash: error.transactionHash,
+              wait: async (confirmations?: number) => {
+                if (confirmations && confirmations > 1) {
+                  const r = await provider.waitForTransaction(error.transactionHash, confirmations);
+                  if (r.status === 0) throw new Error('transaction failed');
+                  return r;
+                }
+                return receipt;
+              },
+            } as TransactionResponse;
+          }
+          throw error;
+        });
       return txResponse;
     }
     throw new Error('Error sending transaction. Provider not found');
@@ -178,6 +207,28 @@ export const Web3ContextProvider: React.FC<{ children: ReactElement }> = ({ chil
   useEffect(() => {
     setAccount(account?.toLowerCase());
   }, [account, setAccount]);
+
+  // Drive walletType from a direct wagmi store subscription. watchAccount fires for
+  // every state transition into `connected` (including the `connecting(address) ->
+  // connected` path that useAccountEffect.onConnect misses, see wagmi#4221), and
+  // it does not subscribe this component to React renders. Seed once on mount via
+  // getAccount in case the store is already `connected` before the effect installs.
+  useEffect(() => {
+    const { status, connector } = getAccount(wagmiConfig);
+    if (status === 'connected' && connector?.id) {
+      setWalletType(connector.id);
+    }
+
+    return watchAccount(wagmiConfig, {
+      onChange(data) {
+        if (data.status === 'connected' && data.connector?.id) {
+          setWalletType(data.connector.id);
+        } else if (data.status === 'disconnected') {
+          setWalletType(undefined);
+        }
+      },
+    });
+  }, [setWalletType]);
 
   useEffect(() => {
     if (readOnlyModeAddress) {

@@ -1,7 +1,7 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
-    "target": "es2016",
+    "target": "es2022",
     "module": "esnext",
     "jsx": "preserve",
     "allowJs": false,
@@ -16,8 +16,11 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "baseUrl": ".",
+    "paths": {
+      "@funkit/connect/clients/*": ["node_modules/@funkit/connect/dist/clients/*"]
+    },
     "typeRoots": ["./node_modules/@types"],
-    "lib": ["dom", "es2017"],
+    "lib": ["dom", "es2022"],
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "resolveJsonModule": true,
@@ -37,6 +40,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "coverage",
+    "src/components/transactions/Swap/backup/**/*.*",
   ],
   "include": ["custom.d.ts", "next-env.d.ts", "**/*.ts", "**/*.tsx"]
 }

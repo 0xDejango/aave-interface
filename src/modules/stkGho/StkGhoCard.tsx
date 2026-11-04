@@ -1,0 +1,83 @@
+import { StakeUIUserData } from '@aave/contract-helpers/dist/esm/V3-uiStakeDataProvider-contract/types';
+import { Trans } from '@lingui/macro';
+import { Alert, Box, Paper, Typography } from '@mui/material';
+import { StakeTokenFormatted, useGeneralStakeUiData } from 'src/hooks/stake/useGeneralStakeUiData';
+import { useUserStakeUiData } from 'src/hooks/stake/useUserStakeUiData';
+import { useModalContext } from 'src/hooks/useModal';
+import { useRootStore } from 'src/store/root';
+import { SAFETY_MODULE } from 'src/utils/events';
+import { useShallow } from 'zustand/shallow';
+
+import { StkGhoDepositPanel } from './StkGhoDepositPanel';
+
+export const StkGhoCard = () => {
+  const { openSavingsGhoDeposit, openSavingsGhoWithdraw, openStkGhoMigrate } = useModalContext();
+  const [trackEvent, currentMarketData] = useRootStore(
+    useShallow((store) => [store.trackEvent, store.currentMarketData])
+  );
+
+  const { data: stakeGeneralResult } = useGeneralStakeUiData(currentMarketData);
+  const { data: stakeUserResult } = useUserStakeUiData(currentMarketData);
+
+  let stkGho: StakeTokenFormatted | undefined;
+  if (stakeGeneralResult && Array.isArray(stakeGeneralResult)) {
+    [, , stkGho] = stakeGeneralResult;
+  }
+
+  let stkGhoUserData: StakeUIUserData | undefined;
+  if (stakeUserResult && Array.isArray(stakeUserResult)) {
+    [, , stkGhoUserData] = stakeUserResult;
+  }
+
+  return (
+    <Paper
+      variant="card"
+      sx={{
+        p: 6,
+        flex: 1,
+        minWidth: 0,
+        width: { xs: '100%', mdlg: 'auto' },
+      }}
+    >
+      <Box sx={{ mb: { xs: 4, md: 6 } }}>
+        <Typography variant="h3">
+          <Trans>Legacy Savings GHO (stkGHO)</Trans>
+        </Typography>
+      </Box>
+
+      <Alert severity="warning" sx={{ width: '100%', mb: 4 }}>
+        <Trans>Rewards for legacy Savings GHO have ended. Migrate to continue earning.</Trans>
+      </Alert>
+
+      <StkGhoDepositPanel
+        stakedToken="GHO"
+        stakeData={stkGho}
+        stakeUserData={stkGhoUserData}
+        onStakeAction={() => {
+          trackEvent(SAFETY_MODULE.STAKE_SAFETY_MODULE, {
+            action: SAFETY_MODULE.OPEN_STAKE_MODAL,
+            asset: 'GHO',
+            stakeType: 'Safety Module',
+          });
+          openSavingsGhoDeposit();
+        }}
+        onWithdraw={() => {
+          trackEvent(SAFETY_MODULE.STAKE_SAFETY_MODULE, {
+            action: SAFETY_MODULE.OPEN_WITHDRAW_MODAL,
+            asset: 'GHO',
+            stakeType: 'Safety Module',
+          });
+          openSavingsGhoWithdraw();
+        }}
+        onMigrate={() => {
+          trackEvent(SAFETY_MODULE.STAKE_SAFETY_MODULE, {
+            action: SAFETY_MODULE.OPEN_MIGRATE_MODAL,
+            asset: 'GHO',
+            stakeType: 'Safety Module',
+          });
+          openStkGhoMigrate();
+        }}
+      />
+    </Paper>
+  );
+};

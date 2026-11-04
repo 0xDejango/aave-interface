@@ -20,6 +20,17 @@ interface PoolReserveBorrowSubset {
   borrowCapUSD: string;
 }
 
+type MarketBorrowabilityReserve = Pick<ComputedReserveData, 'borrowingEnabled' | 'eModes'>;
+
+/**
+ * Whether a reserve has any borrow path on the market.
+ * Mirrors on-chain ValidationLogic: outside e-mode uses borrowingEnabled;
+ * inside e-mode uses the category borrowableBitmap (exposed as eMode.borrowingEnabled).
+ */
+export function assetIsBorrowableOnMarket(reserve: MarketBorrowabilityReserve): boolean {
+  return reserve.borrowingEnabled || reserve.eModes.some((eMode) => eMode.borrowingEnabled);
+}
+
 /**
  * Calculates the maximum amount a user can borrow.
  * @param poolReserve
@@ -91,58 +102,6 @@ export function getMaxAmountAvailableToBorrow(
   return roundToTokenDecimals(amountWithMargin.toString(10), poolReserve.decimals);
 }
 
-/**
- * Calculates the maximum amount of GHO a user can mint
- * @param user
- */
-export function getMaxGhoMintAmount(
-  user: FormatUserSummaryAndIncentivesResponse,
-  poolReserve: PoolReserveBorrowSubset
-) {
-  const userAvailableBorrows = valueToBigNumber(user?.availableBorrowsMarketReferenceCurrency || 0);
-
-  const availableBorrowCap =
-    poolReserve.borrowCap === '0'
-      ? valueToBigNumber(ethers.constants.MaxUint256.toString())
-      : valueToBigNumber(Number(poolReserve.borrowCap)).minus(
-          valueToBigNumber(poolReserve.totalDebt)
-        );
-
-  const maxAmountUserCanMint = BigNumber.max(
-    BigNumber.min(userAvailableBorrows, availableBorrowCap),
-    0
-  );
-
-  const shouldAddMargin =
-    /**
-     * When a user has borrows we assume the debt is increasing faster then the supply.
-     * That's a simplification that might not be true, but doesn't matter in most cases.
-     */
-    user.totalBorrowsMarketReferenceCurrency !== '0' ||
-    /**
-     * When borrow cap could be reached and debt accumulates the debt would be surpassed.
-     */
-    (poolReserve.borrowCapUSD &&
-      poolReserve.totalDebt !== '0' &&
-      maxAmountUserCanMint.gte(availableBorrowCap)) ||
-    /**
-     * When the user would be able to borrow all the remaining ceiling we need to add a margin as existing debt.
-     */
-    (user.isInIsolationMode &&
-      user.isolatedReserve?.isolationModeTotalDebt !== '0' &&
-      // TODO: would be nice if userFormatter contained formatted reserve as this math is done twice now
-      valueToBigNumber(user.isolatedReserve?.debtCeiling || '0')
-        .minus(user.isolatedReserve?.isolationModeTotalDebt || '0')
-        .shiftedBy(-(user.isolatedReserve?.debtCeilingDecimals || 0))
-        .multipliedBy('0.99')
-        .lt(user.availableBorrowsUSD));
-
-  const amountWithMargin = shouldAddMargin
-    ? maxAmountUserCanMint.multipliedBy('0.99')
-    : maxAmountUserCanMint;
-  return roundToTokenDecimals(amountWithMargin.toString(10), 18);
-}
-
 export function assetCanBeBorrowedByUser(
   {
     borrowingEnabled,
@@ -152,14 +111,14 @@ export function assetCanBeBorrowedByUser(
     isFrozen,
     isPaused,
   }: ComputedReserveData,
-  user: ExtendedFormattedUser
+  user?: ExtendedFormattedUser
 ) {
-  if (!borrowingEnabled || !isActive || isFrozen || isPaused) return false;
+  if (!isActive || isFrozen || isPaused) return false;
   if (user?.isInEmode) {
     const reserveEmode = eModes.find((emode) => emode.id === user.userEmodeCategoryId);
     if (!reserveEmode) return false;
     return reserveEmode.borrowingEnabled;
   }
   if (user?.isInIsolationMode && !borrowableInIsolation) return false;
-  return true;
+  return borrowingEnabled;
 }

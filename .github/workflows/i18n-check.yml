@@ -10,16 +10,19 @@ on:
   push:
     branches: ['main']
 
+permissions:
+  contents: read
+
 jobs:
   i18n-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: i18n compile
         uses: ./.github/actions/build
         with:
-          YARN_COMMAND: i18n
+          COMMAND: i18n
           USE_NEXT_CACHE: 'false'
 
       - name: check diff
@@ -28,7 +31,7 @@ jobs:
           then
             echo "i18n up to date"
           else
-          	echo "please run yarn i18n"
+          	echo "please run pnpm i18n"
             exit 1
           exit
           fi

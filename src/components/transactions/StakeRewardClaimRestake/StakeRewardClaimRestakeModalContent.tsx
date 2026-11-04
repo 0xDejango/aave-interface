@@ -93,7 +93,8 @@ export const StakeRewardClaimRestakeModalContent = ({
   if (txState.success)
     return (
       <TxSuccessView
-        action={<Trans>Restaked</Trans>}
+        title={<Trans>Restaked Successfully</Trans>}
+        action={<Trans>restaked</Trans>}
         amount={amountRef.current}
         symbol={rewardsSymbol}
       />
@@ -103,9 +104,15 @@ export const StakeRewardClaimRestakeModalContent = ({
     <>
       <TxModalTitle title="Restake AAVE rewards" />
       {isWrongNetwork && !readOnlyModeAddress && (
-        <ChangeNetworkWarning networkName={networkConfig.name} chainId={stakingChain} />
+        <ChangeNetworkWarning
+          autoSwitchOnMount={true}
+          networkName={networkConfig.name}
+          chainId={stakingChain}
+        />
       )}
-      <CooldownWarning />
+      {stakeData?.stakeCooldownSeconds && (
+        <CooldownWarning cooldownSeconds={stakeData.stakeCooldownSeconds} />
+      )}
       <AssetInput
         value={amount}
         onChange={handleChange}

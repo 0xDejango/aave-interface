@@ -1,354 +1,194 @@
-import { valueToBigNumber } from '@aave/math-utils';
+import { Stake } from '@aave/contract-helpers';
 import { Trans } from '@lingui/macro';
 import { Box, Button, Skeleton, Stack, Typography, useMediaQuery, useTheme } from '@mui/material';
-import { BigNumber } from 'bignumber.js';
-import GhoBorrowApyRange from 'src/components/GhoBorrowApyRange';
+import { ReactNode } from 'react';
 import { FormattedNumber } from 'src/components/primitives/FormattedNumber';
 import { Link, ROUTES } from 'src/components/primitives/Link';
-import { TokenIcon } from 'src/components/primitives/TokenIcon';
-import { TextWithTooltip } from 'src/components/TextWithTooltip';
-import {
-  ComputedReserveData,
-  useAppDataContext,
-} from 'src/hooks/app-data-provider/useAppDataProvider';
+import { useUserStakeUiData } from 'src/hooks/stake/useUserStakeUiData';
+import { useSGhoVaultContext } from 'src/modules/sGho/SGhoVaultContext';
 import { useRootStore } from 'src/store/root';
+import { figVars } from 'src/utils/figmaColors';
 
-interface GhoBannerProps {
-  reserve?: ComputedReserveData;
-}
+/**
+ * Whether the connected user has any legacy stkGHO (formerly "sGHO") staked.
+ * Used to switch the markets-page banner between the migration prompt and
+ * the new-user "Earn into sGHO" prompt.
+ */
+const useHasLegacyStkGhoPosition = () => {
+  const currentMarketData = useRootStore((store) => store.currentMarketData);
+  const { data: stakeUserResult } = useUserStakeUiData(currentMarketData, Stake.gho);
+  const stkGhoRedeemable = stakeUserResult?.[0]?.stakeTokenRedeemableAmount;
+  return !!stkGhoRedeemable && stkGhoRedeemable !== '0';
+};
 
-export const GhoBanner = ({ reserve }: GhoBannerProps) => {
-  const theme = useTheme();
-  const isCustomBreakpoint = useMediaQuery('(min-width:1125px)');
-  const isMd = useMediaQuery(theme.breakpoints.up('xs'));
-  const currentMarket = useRootStore((store) => store.currentMarket);
-  const { ghoReserveData, ghoLoadingData } = useAppDataContext();
+/**
+ * Shared card surface (radius, hairline border, green→neutral tint gradient, soft shadow) for both
+ * banner variants — the diverging layout (row/6rem vs column/188px) is applied per variant on top.
+ */
+const BANNER_SURFACE_SX = {
+  borderRadius: '0.75rem',
+  border: '1px solid',
+  borderColor: 'border-1',
+  backgroundColor: figVars['table-bg'],
+  backgroundImage: `linear-gradient(90deg, ${figVars['sgho-banner-green']} 0%, transparent 42.79%)`,
+  boxShadow: `0px 2px 4px 0px ${figVars['shadow-low']}`,
+  position: 'relative',
+} as const;
 
-  const totalBorrowed = BigNumber.min(
-    valueToBigNumber(reserve?.totalDebt || 0),
-    valueToBigNumber(reserve?.borrowCap || 0)
-  ).toNumber();
-
-  return (
-    <Box
+/** Title + subtitle, shared by the desktop and mobile banner variants. */
+const SavingsGhoBannerHeading = ({ hasLegacyPosition }: { hasLegacyPosition: boolean }) => (
+  <Stack direction="column" gap="0.37rem">
+    <Typography
+      variant="h2"
       sx={{
-        pt: 5,
-        mb: 10,
-        px: {
-          md: 6,
-        },
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'flex-end',
+        fontSize: '1.25rem',
+        fontWeight: 600,
+        lineHeight: 'normal',
+        letterSpacing: '-0.02063rem',
+        fontFeatureSettings: "'cv11' on",
+        color: 'fg-1',
       }}
     >
-      <Box
-        component={Link}
-        href={ROUTES.reserveOverview(reserve?.underlyingAsset || '', currentMarket)}
-        sx={(theme) => ({
-          borderRadius: {
-            md: 4,
-          },
-          display: 'flex',
-          backgroundColor: theme.palette.mode === 'dark' ? '#39375A80' : '#F7F7F9',
+      {hasLegacyPosition ? (
+        <Trans>Migrate your sGHO position</Trans>
+      ) : (
+        <Trans>Earn into sGHO</Trans>
+      )}
+    </Typography>
+    <Typography
+      variant="description"
+      sx={{ lineHeight: '100%', letterSpacing: 'normal' }}
+      color="fg-3"
+    >
+      {hasLegacyPosition ? (
+        <Trans>To continue claiming rewards, migrate now.</Trans>
+      ) : (
+        <Trans>GHO yield with instant withdraws.</Trans>
+      )}
+    </Typography>
+  </Stack>
+);
 
-          position: 'relative',
-          alignItems: {
-            xs: 'none',
-            xsm: 'center',
-          },
-          justifyContent: {
-            xs: 'space-around',
-            xsm: 'none',
-          },
-          flexDirection: {
-            xs: 'column',
-            xsm: 'row',
-          },
-          [theme.breakpoints.up(1125)]: {
-            padding: {
-              xs: '24px 24px 24px 230px',
-              lg: '24px 32px 24px 240x',
-            },
-          },
-          padding: {
-            xs: '16px',
-            xsm: '16px 16px 16px 180px',
-            sm: '16px 24px 16px 188px',
-            md: '22px 20px 22px 200px',
-          },
-          gap: {
-            xs: 6,
-          },
-        })}
-      >
+/** One labelled stat (label above value), shared by both variants; shows a skeleton while loading. */
+const BannerStat = ({
+  label,
+  loading,
+  children,
+}: {
+  label: ReactNode;
+  loading: boolean;
+  children: ReactNode;
+}) => (
+  <Stack direction="column" alignItems="flex-start" gap="0.25rem">
+    <Typography variant="description" color="fg-3" noWrap>
+      {label}
+    </Typography>
+    {loading ? <Skeleton width={70} height={25} /> : children}
+  </Stack>
+);
+
+export const SavingsGhoBanner = ({
+  hasLegacyPositionOverride,
+}: {
+  /**
+   * Showcase/dev only: force the legacy ("Migrate your sGHO position") vs default ("Earn into
+   * sGHO") copy, bypassing wallet-based detection so /dev/components can show both states.
+   */
+  hasLegacyPositionOverride?: boolean;
+} = {}) => {
+  const theme = useTheme();
+  const downToSm = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const { vault, loading: vaultLoading } = useSGhoVaultContext();
+  const totalDepositedUSD = vault?.totalAssets.usd ?? '0';
+  const targetRate = vault?.targetRate ? +vault.targetRate.value : 0;
+  const detectedLegacyPosition = useHasLegacyStkGhoPosition();
+  const hasLegacyPosition = hasLegacyPositionOverride ?? detectedLegacyPosition;
+
+  if (downToSm) {
+    return <GhoSavingsBannerMobile hasLegacyPosition={hasLegacyPosition} />;
+  }
+
+  return (
+    <Stack
+      component={Link}
+      href={ROUTES.sGHO}
+      sx={{
+        ...BANNER_SURFACE_SX,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '1.5rem',
+        height: '6rem',
+        padding: '1.25rem 2rem 1.25rem 1.5rem',
+        overflow: 'hidden',
+      }}
+    >
+      <Stack direction="row" alignItems="center" gap="1.5rem">
         <Box
           component="img"
-          src="/gho-group.svg"
-          alt="ghost and coin"
-          sx={{
-            ['@media screen and (min-width: 1125px)']: {
-              width: 214,
-            },
-            width: {
-              xs: 100,
-              xsm: 160,
-              sm: 165,
-              md: 180,
-            },
-            position: 'absolute',
-            top: {
-              xs: -15,
-              xsm: 36,
-              sm: 12,
-              md: -13,
-              lg: -12,
-            },
-            right: {
-              xs: 0,
-              xsm: 'unset',
-            },
-            left: {
-              xsm: 10,
-            },
-          }}
+          src="/gho-coins.png"
+          alt="GHO coins"
+          sx={{ height: '3.5rem', flexShrink: 0 }}
         />
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            width: '100%',
-            mr: {
-              lg: '5%',
-            },
-            alignItems: {
-              xs: 'none',
-              md: 'middle',
-            },
-            flexDirection: {
-              xs: 'column',
-              '@media screen and (min-width: 1025px)': {
-                flexDirection: 'row',
-              },
-            },
-            gap: {
-              xs: 3,
-            },
-            height: '100%',
-          }}
-        >
-          <Box
-            sx={{
-              pr: {
-                xs: '140px',
-                xsm: 0,
-              },
-              cursor: 'pointer',
-              zIndex: 100,
-              minWidth: {
-                md: 232,
-              },
-              ['@media screen and (min-width: 1125px)']: {
-                width: {
-                  xs: '278px',
-                  lg: '320px',
-                },
-              },
-            }}
-          >
-            <Typography
-              sx={(theme) => ({
-                [theme.breakpoints.up(1125)]: {
-                  typography: 'h3',
-                },
-                typography: {
-                  xs: 'subheader1',
-                  md: 'h4',
-                },
-              })}
-            >
-              <Trans>Meet GHO</Trans>
-            </Typography>
-            <Typography
-              sx={(theme) => ({
-                [theme.breakpoints.up(1125)]: {
-                  typography: 'description',
-                },
-                typography: {
-                  xs: 'caption',
-                },
-              })}
-              color="text.secondary"
-            >
-              A decentralized, multi-collateralized stablecoin created by AaveDAO.
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: {
-                xs: 4,
-                lg: 15,
-              },
-              cursor: 'pointer',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 3,
-                alignItems: 'center',
-              }}
-            >
-              <TokenIcon
-                symbol="GHO"
-                sx={{
-                  fontSize: '38px',
-                  display: {
-                    xs: 'block',
-                    xsm: 'none',
-                    sm: 'block',
-                  },
-                }}
-              />
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                }}
-              >
-                {ghoLoadingData ? (
-                  <Skeleton width={70} height={25} />
-                ) : (
-                  <Stack direction="row" gap={1} alignItems="center">
-                    <FormattedNumber
-                      symbol="USD"
-                      compact
-                      variant={isCustomBreakpoint ? 'h3' : isMd ? 'secondary16' : 'secondary14'}
-                      value={totalBorrowed}
-                    />
-                    <Stack direction="row" gap={1} sx={{ marginTop: 0.5 }}>
-                      <Typography variant="caption">
-                        <Trans>of</Trans>
-                      </Typography>
-                      <FormattedNumber
-                        symbol="USD"
-                        compact
-                        variant="caption"
-                        value={reserve?.borrowCap || 0}
-                      />
-                    </Stack>
-                  </Stack>
-                )}
-                <Typography
-                  sx={{
-                    ['@media screen and (min-width: 1125px)']: {
-                      typography: 'description',
-                    },
-                    typography: {
-                      xs: 'caption',
-                    },
-                  }}
-                  color="text.secondary"
-                  noWrap
-                >
-                  <Trans>Total borrowed</Trans>
-                </Typography>
-              </Box>
-            </Box>
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-              }}
-            >
-              <GhoBorrowApyRange
-                minVal={ghoReserveData.ghoBorrowAPYWithMaxDiscount}
-                maxVal={ghoReserveData.ghoVariableBorrowAPY}
-                variant={isCustomBreakpoint ? 'h3' : isMd ? 'secondary16' : 'secondary14'}
-                percentVariant={isCustomBreakpoint ? 'h3' : isMd ? 'secondary16' : 'secondary14'}
-                hyphenVariant={isCustomBreakpoint ? 'h3' : isMd ? 'secondary16' : 'secondary14'}
-              />
-              <Typography
-                sx={{
-                  ['@media screen and (min-width: 1125px)']: {
-                    typography: 'description',
-                  },
-                  typography: {
-                    xs: 'caption',
-                  },
-                }}
-                color="text.secondary"
-                noWrap
-              >
-                <TextWithTooltip
-                  sx={{
-                    ['@media screen and (min-width: 1125px)']: {
-                      typography: 'description',
-                    },
-                    typography: {
-                      xs: 'caption',
-                    },
-                  }}
-                  text={<Trans>Borrow rate</Trans>}
-                >
-                  <>
-                    <Trans>
-                      Users who stake AAVE in Safety Module (i.e. stkAAVE holders) receive a
-                      discount on GHO borrow interest rate.
-                    </Trans>
-                  </>
-                </TextWithTooltip>
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              component={Link}
-              size={'medium'}
-              href={ROUTES.reserveOverview(reserve?.underlyingAsset || '', currentMarket)}
-              sx={{
-                display: {
-                  xs: 'none',
-                  sm: 'flex',
-                },
-                marginLeft: {
-                  xs: 'none',
-                  xsm: 'auto',
-                },
-                whiteSpace: 'no-wrap',
-                minWidth: 'max-content',
-                alignSelf: 'center',
-              }}
-            >
-              <Trans>View details</Trans>
-            </Button>
-          </Box>
-        </Box>
-        <Button
-          variant="contained"
-          component={Link}
-          size={'large'}
-          href={ROUTES.reserveOverview(reserve?.underlyingAsset || '', currentMarket)}
-          sx={{
-            display: {
-              xs: 'flex',
-              sm: 'none',
-            },
-            marginLeft: {
-              xs: 'none',
-              xsm: 'auto',
-            },
-            whiteSpace: 'no-wrap',
-            minWidth: 'max-content',
-          }}
-        >
+        <SavingsGhoBannerHeading hasLegacyPosition={hasLegacyPosition} />
+      </Stack>
+      <BannerStat label={<Trans>Total deposited</Trans>} loading={vaultLoading}>
+        <FormattedNumber symbol="USD" compact variant="h3" color="fg-1" value={totalDepositedUSD} />
+      </BannerStat>
+      <BannerStat label={<Trans>APY</Trans>} loading={vaultLoading}>
+        <FormattedNumber percent variant="h3" color="fg-1" value={targetRate} />
+      </BannerStat>
+      <Stack direction="row" gap="0.62rem">
+        <Button variant="tertiary" component={Link} size="medium" href={ROUTES.sGHO}>
           <Trans>View details</Trans>
         </Button>
-      </Box>
-    </Box>
+      </Stack>
+    </Stack>
+  );
+};
+
+const GhoSavingsBannerMobile = ({ hasLegacyPosition }: { hasLegacyPosition: boolean }) => {
+  const { vault, loading: vaultLoading } = useSGhoVaultContext();
+  const totalDepositedUSD = vault?.totalAssets.usd ?? '0';
+  const targetRate = vault?.targetRate ? +vault.targetRate.value : 0;
+
+  return (
+    <Stack
+      component={Link}
+      href={ROUTES.sGHO}
+      sx={{
+        ...BANNER_SURFACE_SX,
+        height: '188px',
+      }}
+    >
+      <Stack
+        direction="column"
+        sx={{ width: '100%', height: '100%', padding: '16px' }}
+        justifyContent="space-between"
+      >
+        <SavingsGhoBannerHeading hasLegacyPosition={hasLegacyPosition} />
+        <Stack direction="row" alignItems="center" gap={4}>
+          <BannerStat label={<Trans>Total deposited</Trans>} loading={vaultLoading}>
+            <FormattedNumber
+              symbol="USD"
+              compact
+              variant="h3"
+              color="fg-1"
+              value={totalDepositedUSD}
+            />
+          </BannerStat>
+          <BannerStat label={<Trans>APY</Trans>} loading={vaultLoading}>
+            <FormattedNumber percent variant="h3" color="fg-1" value={targetRate} />
+          </BannerStat>
+        </Stack>
+        <Stack direction="row" gap="0.62rem">
+          <Button variant="tertiary" fullWidth component={Link} size="medium" href={ROUTES.sGHO}>
+            <Trans>View details</Trans>
+          </Button>
+        </Stack>
+      </Stack>
+    </Stack>
   );
 };

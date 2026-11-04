@@ -1,6 +1,7 @@
 import { ProtocolAction } from '@aave/contract-helpers';
 import { Trans } from '@lingui/macro';
 import { Box, Button, Divider } from '@mui/material';
+import { BorrowableOnlyInEModeTooltip } from 'src/components/infoTooltips/BorrowableOnlyInEModeTooltip';
 import { KernelAirdropTooltip } from 'src/components/infoTooltips/KernelAirdropTooltip';
 import { SpkAirdropTooltip } from 'src/components/infoTooltips/SpkAirdropTooltip';
 import { SuperFestTooltip } from 'src/components/infoTooltips/SuperFestTooltip';
@@ -8,6 +9,8 @@ import { VariableAPYTooltip } from 'src/components/infoTooltips/VariableAPYToolt
 import { NoData } from 'src/components/primitives/NoData';
 import { ReserveSubheader } from 'src/components/ReserveSubheader';
 import { useRootStore } from 'src/store/root';
+import { fetchIconSymbolAndName } from 'src/ui-config/reservePatches';
+import { getBorrowableOnlyInEModeLabels } from 'src/utils/borrowableOnlyInEMode';
 import { MARKETS } from 'src/utils/events';
 import { showExternalIncentivesTooltip } from 'src/utils/utils';
 import { useShallow } from 'zustand/shallow';
@@ -16,61 +19,72 @@ import { IncentivesCard } from '../../components/incentives/IncentivesCard';
 import { FormattedNumber } from '../../components/primitives/FormattedNumber';
 import { Link, ROUTES } from '../../components/primitives/Link';
 import { Row } from '../../components/primitives/Row';
-import { ComputedReserveData } from '../../hooks/app-data-provider/useAppDataProvider';
 import { ListMobileItemWrapper } from '../dashboard/lists/ListMobileItemWrapper';
+import { ReserveWithProtocolIncentives } from './MarketAssetsList';
+import { showBorrowingDisabledNote } from './utils/borrowingDisabled';
 
-export const MarketAssetsListMobileItem = ({ ...reserve }: ComputedReserveData) => {
+export const MarketAssetsListMobileItem = ({ ...reserve }: ReserveWithProtocolIncentives) => {
   const [trackEvent, currentMarket] = useRootStore(
     useShallow((store) => [store.trackEvent, store.currentMarket])
   );
 
   const externalIncentivesTooltipsSupplySide = showExternalIncentivesTooltip(
-    reserve.symbol,
+    reserve.underlyingToken.symbol,
     currentMarket,
     ProtocolAction.supply
   );
   const externalIncentivesTooltipsBorrowSide = showExternalIncentivesTooltip(
-    reserve.symbol,
+    reserve.underlyingToken.symbol,
     currentMarket,
     ProtocolAction.borrow
   );
+  const { iconSymbol } = fetchIconSymbolAndName({
+    underlyingAsset: reserve.underlyingToken.address,
+    symbol: reserve.underlyingToken.symbol,
+    name: reserve.underlyingToken.name,
+  });
+
+  const displayIconSymbol =
+    iconSymbol?.toLowerCase() !== reserve.underlyingToken.symbol.toLowerCase()
+      ? iconSymbol
+      : reserve.underlyingToken.symbol;
+
+  const borrowableOnlyInEModeLabels = getBorrowableOnlyInEModeLabels(reserve);
 
   return (
     <ListMobileItemWrapper
-      symbol={reserve.symbol}
-      iconSymbol={reserve.iconSymbol}
-      name={reserve.name}
-      underlyingAsset={reserve.underlyingAsset}
+      symbol={reserve.underlyingToken.symbol}
+      iconSymbol={displayIconSymbol}
+      name={reserve.underlyingToken.name}
+      underlyingAsset={reserve.underlyingToken.address.toLowerCase()}
       currentMarket={currentMarket}
-      isIsolated={reserve.isIsolated}
+      isIsolated={reserve.isolationModeConfig?.canBeCollateral}
+      frozen={reserve.isFrozen}
+      showExternalIncentivesTooltips={{
+        superFestRewards: externalIncentivesTooltipsSupplySide.superFestRewards,
+        spkAirdrop: externalIncentivesTooltipsSupplySide.spkAirdrop,
+        kernelPoints: externalIncentivesTooltipsSupplySide.kernelPoints,
+      }}
     >
       <Row caption={<Trans>Total supplied</Trans>} captionVariant="description" mb={3}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: { xs: 'flex-end' },
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <FormattedNumber compact value={reserve.totalLiquidity} variant="secondary14" />
-          <ReserveSubheader value={reserve.totalLiquidityUSD} rightAlign={true} />
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+          <FormattedNumber compact value={reserve.size.amount.value} variant="h5" />
+          <ReserveSubheader value={reserve.size.usd} />
         </Box>
       </Row>
       <Row
         caption={<Trans>Supply APY</Trans>}
         captionVariant="description"
-        mb={3}
+        mb="1rem"
         align="flex-start"
       >
         <IncentivesCard
           align="flex-end"
-          value={reserve.supplyAPY}
-          incentives={reserve.aIncentivesData || []}
-          address={reserve.aTokenAddress}
-          symbol={reserve.symbol}
-          variant="secondary14"
+          value={reserve.supplyInfo.apy.value}
+          incentives={reserve.supplyProtocolIncentives}
+          address={reserve.aToken.address}
+          symbol={reserve.underlyingToken.symbol}
+          variant="h5"
           tooltip={
             <>
               {externalIncentivesTooltipsSupplySide.superFestRewards && <SuperFestTooltip />}
@@ -83,25 +97,21 @@ export const MarketAssetsListMobileItem = ({ ...reserve }: ComputedReserveData) 
         />
       </Row>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: '1rem' }} />
 
       <Row caption={<Trans>Total borrowed</Trans>} captionVariant="description" mb={3}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: { xs: 'flex-end' },
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
-          {Number(reserve.totalDebt) > 0 ? (
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+          {reserve.borrowInfo && Number(reserve.borrowInfo?.total.amount.value) > 0 ? (
             <>
-              <FormattedNumber compact value={reserve.totalDebt} variant="secondary14" />
-              <ReserveSubheader value={reserve.totalDebtUSD} rightAlign={true} />
+              <FormattedNumber
+                compact
+                value={Number(reserve.borrowInfo.total.amount.value)}
+                variant="h5"
+              />
+              <ReserveSubheader value={String(reserve.borrowInfo.total.usd)} />
             </>
           ) : (
-            <NoData variant={'secondary14'} color="text.secondary" />
+            <NoData variant={'h5'} />
           )}
         </Box>
       </Row>
@@ -114,40 +124,45 @@ export const MarketAssetsListMobileItem = ({ ...reserve }: ComputedReserveData) 
           />
         }
         captionVariant="description"
-        mb={3}
+        mb="1.5rem"
         align="flex-start"
       >
-        <IncentivesCard
-          align="flex-end"
-          value={Number(reserve.totalVariableDebtUSD) > 0 ? reserve.variableBorrowAPY : '-1'}
-          incentives={reserve.vIncentivesData || []}
-          address={reserve.variableDebtTokenAddress}
-          symbol={reserve.symbol}
-          variant="secondary14"
-          tooltip={
-            <>
-              {externalIncentivesTooltipsBorrowSide.superFestRewards && <SuperFestTooltip />}
-              {externalIncentivesTooltipsBorrowSide.spkAirdrop && <SpkAirdropTooltip />}
-            </>
-          }
-          market={currentMarket}
-          protocolAction={ProtocolAction.borrow}
-        />
-        {!reserve.borrowingEnabled &&
-          Number(reserve.totalVariableDebt) > 0 &&
-          !reserve.isFrozen && <ReserveSubheader value={'Disabled'} />}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <IncentivesCard
+            align="flex-end"
+            value={
+              reserve.borrowInfo && Number(reserve.borrowInfo.total.amount.value) > 0
+                ? String(reserve.borrowInfo.apy.value)
+                : '-1'
+            }
+            incentives={reserve.borrowProtocolIncentives}
+            address={reserve.vToken.address}
+            symbol={reserve.underlyingToken.symbol}
+            variant="h5"
+            tooltip={
+              <>
+                {externalIncentivesTooltipsBorrowSide.superFestRewards && <SuperFestTooltip />}
+                {externalIncentivesTooltipsBorrowSide.spkAirdrop && <SpkAirdropTooltip />}
+              </>
+            }
+            market={currentMarket}
+            protocolAction={ProtocolAction.borrow}
+          />
+          {showBorrowingDisabledNote(reserve) && <ReserveSubheader value={'Disabled'} />}
+          {borrowableOnlyInEModeLabels.length > 0 && <BorrowableOnlyInEModeTooltip />}
+        </Box>
       </Row>
       <Button
-        variant="outlined"
+        variant="tertiary"
         component={Link}
-        href={ROUTES.reserveOverview(reserve.underlyingAsset, currentMarket)}
+        href={ROUTES.reserveOverview(reserve.underlyingToken.address.toLowerCase(), currentMarket)}
         fullWidth
         onClick={() => {
           trackEvent(MARKETS.DETAILS_NAVIGATION, {
             type: 'button',
-            asset: reserve.underlyingAsset,
+            asset: reserve.underlyingToken.address.toLowerCase(),
             market: currentMarket,
-            assetName: reserve.name,
+            assetName: reserve.underlyingToken.name,
           });
         }}
       >

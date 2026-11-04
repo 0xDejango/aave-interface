@@ -1,9 +1,9 @@
-import { ExternalLinkIcon } from '@heroicons/react/solid';
 import { Trans } from '@lingui/macro';
-import { Button, Stack, SvgIcon, Typography } from '@mui/material';
+import { Alert, Button, Stack, Typography } from '@mui/material';
+import { ArrowUpRightIcon } from 'src/components/icons/ArrowUpRightIcon';
 import { Link, ROUTES } from 'src/components/primitives/Link';
-import { Warning } from 'src/components/primitives/Warning';
 import { getEmodeMessage } from 'src/components/transactions/Emode/EmodeNaming';
+import { isFunSupplyAsset } from 'src/components/transactions/FunCheckout/funSupplyAssets';
 import {
   ComputedReserveData,
   useAppDataContext,
@@ -13,6 +13,7 @@ import { WalletEmptyInfo } from 'src/modules/dashboard/lists/SupplyAssetsList/Wa
 import { useRootStore } from 'src/store/root';
 import { assetCanBeBorrowedByUser } from 'src/utils/getMaxAmountAvailableToBorrow';
 import { displayGhoForMintableMarket } from 'src/utils/ghoUtilities';
+import { replaceUnderscoresWithSpaces } from 'src/utils/utils';
 import { useShallow } from 'zustand/shallow';
 
 import { useModalContext } from './useModal';
@@ -52,8 +53,16 @@ export const useReserveActionState = ({
 
   const isGho = displayGhoForMintableMarket({ symbol: reserve.symbol, currentMarket });
 
+  // fun-routed assets can be supplied from any EVM asset / fiat via the funkit
+  // checkout, so an empty wallet (balance / maxAmountToSupply === '0') shouldn't
+  // disable the button — only a maxed supply cap does (mirrors SupplyAssetsList).
+  // fun assets are never GHO, so that guard is moot for them.
+  const isFunSupply = isFunSupplyAsset(currentMarket, reserve.underlyingAsset);
+
   return {
-    disableSupplyButton: balance === '0' || maxAmountToSupply === '0' || isGho,
+    disableSupplyButton: isFunSupply
+      ? !!supplyCap?.isMaxed
+      : balance === '0' || maxAmountToSupply === '0' || isGho,
     disableBorrowButton:
       !assetCanBeBorrowedFromPool ||
       userHasNoCollateralSupplied ||
@@ -61,11 +70,11 @@ export const useReserveActionState = ({
       eModeBorrowDisabled ||
       maxAmountToBorrow === '0',
     alerts: (
-      <Stack gap={3}>
+      <Stack gap={3} sx={{ mt: '0.25rem', '&:empty': { display: 'none' } }}>
         {balance === '0' && !isGho && (
           <>
             {currentNetworkConfig.isTestnet ? (
-              <Warning sx={{ mb: 0 }} severity="info" icon={false}>
+              <Alert sx={{ width: '100%', mb: 0 }} severity="info" data-size="small">
                 <Trans>
                   Your {networkName} wallet is empty. Get free test {reserve.name} at
                 </Trans>{' '}
@@ -76,11 +85,7 @@ export const useReserveActionState = ({
                     component={Link}
                     sx={{ verticalAlign: 'top' }}
                     disableRipple
-                    endIcon={
-                      <SvgIcon sx={{ width: 14, height: 14 }}>
-                        <ExternalLinkIcon />
-                      </SvgIcon>
-                    }
+                    endIcon={<ArrowUpRightIcon sx={{ width: 14, height: 14 }} />}
                   >
                     <Typography variant="caption">
                       <Trans>{networkName} Faucet</Trans>
@@ -98,13 +103,12 @@ export const useReserveActionState = ({
                     </Typography>
                   </Button>
                 )}
-              </Warning>
+              </Alert>
             ) : (
               <WalletEmptyInfo
                 sx={{ mb: 0 }}
                 name={networkName}
                 bridge={bridge}
-                icon={false}
                 chainId={currentChainId}
               />
             )}
@@ -112,44 +116,47 @@ export const useReserveActionState = ({
         )}
 
         {(balance !== '0' || isGho) && user?.totalCollateralMarketReferenceCurrency === '0' && (
-          <Warning sx={{ mb: 0 }} severity="info" icon={false}>
+          <Alert sx={{ width: '100%', mb: 0 }} severity="info" data-size="small">
             <Trans>To borrow you need to supply any asset to be used as collateral.</Trans>
-          </Warning>
+          </Alert>
         )}
 
         {isolationModeBorrowDisabled && (
-          <Warning sx={{ mb: 0 }} severity="warning" icon={false}>
+          <Alert sx={{ width: '100%', mb: 0 }} severity="warning" data-size="small">
             <Trans>Collateral usage is limited because of Isolation mode.</Trans>
-          </Warning>
+          </Alert>
         )}
 
         {eModeBorrowDisabled && isolationModeBorrowDisabled && (
-          <Warning sx={{ mb: 0 }} severity="info" icon={false}>
+          <Alert sx={{ width: '100%', mb: 0 }} severity="info" data-size="small">
             <Trans>
               Borrowing is unavailable because you’ve enabled Efficiency Mode (E-Mode) and Isolation
               mode. To manage E-Mode and Isolation mode visit your{' '}
               <Link href={ROUTES.dashboard}>Dashboard</Link>.
             </Trans>
-          </Warning>
+          </Alert>
         )}
 
         {eModeBorrowDisabled && !isolationModeBorrowDisabled && (
-          <Warning sx={{ mb: 0 }} severity="info" icon={false}>
+          <Alert sx={{ width: '100%', mb: 0 }} severity="info" data-size="small">
             <Trans>
               Borrowing is unavailable because you’ve enabled Efficiency Mode (E-Mode) for{' '}
-              {getEmodeMessage(eModes[user.userEmodeCategoryId].label)} category. To manage E-Mode
-              categories visit your <Link href={ROUTES.dashboard}>Dashboard</Link>.
+              {replaceUnderscoresWithSpaces(
+                getEmodeMessage(eModes[user.userEmodeCategoryId].label)
+              )}{' '}
+              category. To manage E-Mode categories visit your{' '}
+              <Link href={ROUTES.dashboard}>Dashboard</Link>.
             </Trans>
-          </Warning>
+          </Alert>
         )}
 
         {!eModeBorrowDisabled && isolationModeBorrowDisabled && (
-          <Warning sx={{ mb: 0 }} severity="info" icon={false}>
+          <Alert sx={{ width: '100%', mb: 0 }} severity="info" data-size="small">
             <Trans>
               Borrowing is unavailable because you’re using Isolation mode. To manage Isolation mode
               visit your <Link href={ROUTES.dashboard}>Dashboard</Link>.
             </Trans>
-          </Warning>
+          </Alert>
         )}
 
         {maxAmountToSupply === '0' &&
